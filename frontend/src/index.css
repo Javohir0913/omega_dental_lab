@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-surface-muted text-ink antialiased;
+  }
+  html.dark body {
+    @apply bg-[#131720] text-[#e6e9ee];
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #c9ced6 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-[#c9ced6];
+  }
+  html.dark *::-webkit-scrollbar-thumb {
+    @apply bg-[#39414f];
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-surface-border bg-white shadow-card;
+  }
+  html.dark .card {
+    @apply border-[#2a3140] bg-[#1a1f2a];
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg px-3 py-1.5
+           text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600;
+  }
+  .btn-ghost {
+    @apply btn border border-surface-border bg-white text-ink hover:bg-surface-muted;
+  }
+  html.dark .btn-ghost {
+    @apply border-[#2f3745] bg-[#1a1f2a] text-[#e6e9ee] hover:bg-[#222836];
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm
+           outline-none transition-colors placeholder:text-ink-faint
+           focus:border-brand-400 focus:ring-2 focus:ring-brand-100;
+  }
+  html.dark .input {
+    @apply border-[#2f3745] bg-[#151a23] text-[#e6e9ee] focus:border-brand-500 focus:ring-brand-900/40;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium text-ink-soft;
+  }
+  html.dark .label {
+    @apply text-[#98a2b3];
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium;
+  }
+}

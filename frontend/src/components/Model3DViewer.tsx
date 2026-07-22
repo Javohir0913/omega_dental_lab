@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
-import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js'
+import { STLLoader } from 'three/addons/loaders/STLLoader.js'
 
 interface Props {
   url: string   // blob: yoki http: URL

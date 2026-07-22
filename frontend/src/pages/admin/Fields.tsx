@@ -325,9 +325,9 @@ function FieldForm({
         <Field label="Варианты / Variantlar" required>
           <div className="space-y-1.5">
             {options.map((o, i) => (
-              <div key={i} className="flex gap-1.5">
+              <div key={i} className="flex flex-wrap gap-1.5 sm:flex-nowrap">
                 <input
-                  className="input w-28 font-mono text-xs"
+                  className="input w-full font-mono text-xs sm:w-28"
                   placeholder="код"
                   value={String(o.value ?? '')}
                   onChange={(e) => {

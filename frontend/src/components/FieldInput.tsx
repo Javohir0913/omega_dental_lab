@@ -405,7 +405,7 @@ export function FileFieldInput({
                 </span>
               )}
               <span
-                className={`max-w-[100px] truncate ${canPreview(f) ? 'cursor-pointer hover:text-brand-600' : ''}`}
+                className={`max-w-[100px] truncate sm:max-w-[180px] ${canPreview(f) ? 'cursor-pointer hover:text-brand-600' : ''}`}
                 onClick={() => handleOpen(f)}
               >
                 {f.name}

@@ -75,7 +75,7 @@ export default function ChatsPage() {
     <div className="flex h-[calc(100dvh-3.5rem)]">
       {/* Ro'yxat */}
       <div className={clsx('w-full shrink-0 flex-col border-r border-surface-border bg-white dark:border-[#2a3140] dark:bg-[#171c26] md:flex md:w-72', active ? 'hidden' : 'flex')}>
-        <div className="flex items-center gap-1 border-b border-surface-border p-2 dark:border-[#2a3140]">
+        <div className="flex flex-wrap items-center gap-1 border-b border-surface-border p-2 dark:border-[#2a3140]">
           {[
             { v: '' as const, l: t('all') },
             { v: 'order' as const, l: t('nav_orders') },

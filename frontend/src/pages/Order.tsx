@@ -419,12 +419,12 @@ function InfoTab({
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <div className="card p-4 lg:col-span-2">
+      <div className="card overflow-x-auto p-4 lg:col-span-2">
         <table className="w-full text-sm">
           <tbody>
             {/* Title */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('order_title')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('order_title')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -435,7 +435,7 @@ function InfoTab({
             </tr>
             {/* Proyekt rasmi */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">
                 {lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}
               </td>
               <td className="py-2">
@@ -456,7 +456,7 @@ function InfoTab({
             </tr>
             {/* Patient */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('patient')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('patient')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <SearchSelect
@@ -476,7 +476,7 @@ function InfoTab({
             </tr>
             {/* Doctor */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('doctor')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('doctor')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <SearchSelect
@@ -494,7 +494,7 @@ function InfoTab({
             </tr>
             {/* Services — searchable multi-select dropdown */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('services')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('services')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <div className="relative">
@@ -555,10 +555,10 @@ function InfoTab({
                 )}
               </td>
             </tr>
-            {/* Teeth */}
+            {/* Teeth — to'liq qatorga cho'zilgan, chizma torayib qolmasin */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('teeth')}</td>
-              <td className="py-2">
+              <td colSpan={2} className="py-2">
+                <div className="mb-1.5 text-xs text-ink-faint">{t('teeth')}</div>
                 {canEdit ? (
                   <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
                 ) : (order.teeth ?? []).length > 0 ? (
@@ -570,7 +570,7 @@ function InfoTab({
             </tr>
             {/* Responsible */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('responsible')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('responsible')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <div className="relative" ref={assignRef}>
@@ -637,10 +637,10 @@ function InfoTab({
             </tr>
             {/* Deadline */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('deadline')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('deadline')}</td>
               <td className="py-2">
                 {canEdit ? (
-                  <input type="datetime-local" className="input w-auto" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+                  <input type="datetime-local" className="input w-full max-w-[220px]" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
                 ) : order.deadline ? (
                   `${dt(order.deadline)} · ${fromNow(order.deadline)}`
                 ) : (
@@ -650,12 +650,12 @@ function InfoTab({
             </tr>
             {/* In stage — read-only */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('in_stage')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('in_stage')}</td>
               <td className="py-2">{order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}</td>
             </tr>
             {/* Priority */}
             <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{t('priority')}</td>
+              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('priority')}</td>
               <td className="py-2">
                 {canEdit ? (
                   <input type="number" min={0} max={10} className="input w-20" value={priority} onChange={(e) => setPriority(e.target.value)} />
@@ -672,7 +672,7 @@ function InfoTab({
                 const val = cf[f.code]
                 return (
                   <tr key={f.id} className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-40 py-2 pr-3 align-top text-xs text-ink-faint">{label}</td>
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{label}</td>
                     <td className="py-2">
                       {f.type === 'file' ? (
                         /* Fayl maydonini har doim interaktiv ko'rsatamiz */
@@ -1091,15 +1091,15 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
         >
           {/* Header */}
           <div className="mb-3 flex w-full max-w-5xl shrink-0 items-center justify-between px-4">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="truncate text-sm text-white/80">{lightbox.name}</span>
               {lightboxUrls.length > 1 && (
-                <span className="rounded bg-white/10 px-2 py-0.5 text-xs text-white/60">
+                <span className="shrink-0 rounded bg-white/10 px-2 py-0.5 text-xs text-white/60">
                   {lightboxIdx + 1} / {lightboxUrls.length}
                 </span>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <button
                 className="rounded-md bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20"
                 onClick={(e) => { e.stopPropagation(); download(order.files.find(f => f.name === lightbox.name)?.url ?? '', lightbox.name) }}

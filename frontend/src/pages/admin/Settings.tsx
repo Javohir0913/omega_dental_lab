@@ -164,7 +164,7 @@ export default function AdminSettings() {
   if (isLoading) return <Spinner />
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="max-w-xl space-y-4 lg:max-w-3xl xl:max-w-4xl">
       <Field label={t('setting_company_name')}>
         <input
           className="input"
@@ -241,7 +241,7 @@ export default function AdminSettings() {
       </label>
 
       <Field label={t('setting_log_retention')}>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             className="input w-24"
             type="number"
@@ -259,7 +259,7 @@ export default function AdminSettings() {
       </Field>
 
       <Field label={t('setting_max_upload')}>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             className="input w-24"
             type="number"
@@ -400,7 +400,7 @@ export default function AdminSettings() {
           </ul>
         )}
 
-        <div className="grid gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2">
           <input
             className="input"
             type="number"
@@ -426,6 +426,8 @@ export default function AdminSettings() {
             value={holidayForm.year}
             onChange={(e) => setHolidayForm((p) => ({ ...p, year: e.target.value }))}
           />
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
           <input
             className="input"
             placeholder={t('holiday_name_ru')}

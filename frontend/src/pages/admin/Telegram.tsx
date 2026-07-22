@@ -67,7 +67,7 @@ export default function AdminTelegram() {
   if (isLoading) return <Spinner />
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl xl:max-w-4xl">
       <div className="mb-1 text-sm font-semibold">{t('telegram_contacts_title')}</div>
       <p className="mb-3 text-xs text-ink-faint">{t('telegram_contacts_hint')}</p>
 

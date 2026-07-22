@@ -39,7 +39,7 @@ function Column({
   const { setNodeRef } = useDroppable({ id: `stage-${col.stage.id}`, data: { stage: col.stage } })
 
   return (
-    <div className="flex w-[82vw] max-w-[300px] shrink-0 flex-col sm:w-[276px]">
+    <div className="flex w-[82vw] max-w-[300px] shrink-0 flex-col sm:w-[276px] lg:w-[300px] xl:w-[320px] 2xl:w-[360px]">
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: col.stage.color }} />
         <span className="truncate text-xs font-semibold">{nm(col.stage, 'name')}</span>
@@ -278,7 +278,7 @@ export default function KanbanPage() {
           </button>
 
           {showFields && (
-            <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+            <div className="absolute right-0 top-full z-30 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
               <div className="max-h-64 overflow-y-auto p-2">
                 {fieldDefs.map((f) => (
                   <label

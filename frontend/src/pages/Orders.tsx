@@ -123,7 +123,7 @@ export default function OrdersPage() {
                 {t('stage')}{stageIds.length > 0 ? ` (${stageIds.length})` : ''}
               </button>
               {showStageFilter && (
-                <div className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+                <div className="absolute left-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
                   <div className="max-h-56 overflow-y-auto p-2">
                     {(() => {
                       const work = stages.filter((s) => s.kind === 'work')

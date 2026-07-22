@@ -45,9 +45,9 @@ export function Modal({
           wide ? 'max-w-4xl' : 'max-w-lg',
         )}
       >
-        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3 dark:border-[#2a3140]">
-          <div className="text-sm font-semibold">{title}</div>
-          <button onClick={onClose} className="rounded p-1 text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836]">
+        <div className="flex items-center justify-between gap-2 border-b border-surface-border px-4 py-3 dark:border-[#2a3140]">
+          <div className="min-w-0 truncate text-sm font-semibold">{title}</div>
+          <button onClick={onClose} className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836]">
             ✕
           </button>
         </div>

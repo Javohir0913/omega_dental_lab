@@ -180,6 +180,24 @@ export default function Layout() {
           )}
         </nav>
 
+        {/* til — mobil menyuda, sarlavhadan yashirilgani uchun shu yerda ko'rinadi */}
+        <div className="flex justify-center gap-1 border-t border-surface-border p-2 dark:border-[#2a3140] md:hidden">
+          {(['ru', 'uz'] as Lang[]).map((l) => (
+            <button
+              key={l}
+              onClick={() => switchLang(l)}
+              className={clsx(
+                'rounded-lg border px-3 py-1.5 text-xs uppercase transition-colors',
+                lang === l
+                  ? 'border-brand-500 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-200'
+                  : 'border-surface-border text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]',
+              )}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
         <button
           onClick={() => setCollapsed((v) => !v)}
           className="hidden border-t border-surface-border py-2 text-xs text-ink-faint hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#222836] md:block"
@@ -196,8 +214,8 @@ export default function Layout() {
           </button>
           <div className="flex-1" />
 
-          {/* til */}
-          <div className="flex overflow-hidden rounded-lg border border-surface-border text-xs dark:border-[#2f3745]">
+          {/* til — juda tor ekranlarda o'rin tejash uchun yashiriladi */}
+          <div className="hidden overflow-hidden rounded-lg border border-surface-border text-xs dark:border-[#2f3745] sm:flex">
             {(['ru', 'uz'] as Lang[]).map((l) => (
               <button
                 key={l}

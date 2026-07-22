@@ -336,7 +336,7 @@ export default function ChatPanel({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Sarlavha */}
-      <div className="flex items-center gap-2 border-b border-surface-border px-3 py-1.5 dark:border-[#2a3140]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-surface-border px-3 py-1.5 dark:border-[#2a3140]">
         <div className="flex flex-1 flex-wrap gap-1">
           {(chat?.members ?? []).slice(0, 6).map((m) => (
             <span key={m.id} className="flex items-center gap-1 rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] dark:bg-[#242b38]">
@@ -495,7 +495,7 @@ export default function ChatPanel({
 
       <div className="relative flex items-end gap-2 border-t border-surface-border p-2 dark:border-[#2a3140]">
         {mentionQuery !== null && mentionMembers.length > 0 && (
-          <div className="absolute bottom-full left-2 z-20 mb-1 w-56 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+          <div className="absolute bottom-full left-2 z-20 mb-1 max-h-[40vh] w-56 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
             {mentionMembers.map((u, i) => (
               <button
                 key={u.id}

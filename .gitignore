@@ -12,3 +12,5 @@ uploads/*
 .idea/
 *.log
 .DS_Store
+*.tsbuildinfo
+namuna/

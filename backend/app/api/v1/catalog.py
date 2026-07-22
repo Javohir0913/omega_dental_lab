@@ -58,6 +58,17 @@ async def list_doctors(
     )
 
 
+@doctors_router.get("/{doctor_id}", response_model=DoctorOut)
+async def get_doctor(
+    doctor_id: int, db: DbDep, _: Annotated[User, Depends(require("doctor.view"))]
+):
+    res = await db.execute(select(Doctor).where(Doctor.id == doctor_id))
+    doctor = res.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(404, "doctor_not_found")
+    return DoctorOut.model_validate(doctor)
+
+
 @doctors_router.post("", response_model=DoctorOut, status_code=201)
 async def create_doctor(
     body: DoctorCreate,

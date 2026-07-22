@@ -3,6 +3,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.schemas.common import ORMModel
+from app.schemas.user import UserShort
 
 
 # ---------- Custom fields ----------
@@ -101,6 +102,7 @@ class NotifyTemplateOut(ORMModel):
     is_active: bool
     recipients: list
     notify_actor: bool
+    send_telegram: bool
     title_ru: str
     title_uz: str
     body_ru: str
@@ -113,6 +115,7 @@ class NotifyTemplateUpsert(BaseModel):
     is_active: bool = True
     recipients: list[str] = []
     notify_actor: bool = False
+    send_telegram: bool = False
     title_ru: str = ""
     title_uz: str = ""
     body_ru: str = ""
@@ -148,3 +151,43 @@ class SettingsOut(BaseModel):
 
 class SettingsUpdate(BaseModel):
     values: dict
+
+
+# ---------- Ish kalendari: bayramlar ----------
+
+class HolidayOut(ORMModel):
+    id: int
+    month: int
+    day: int
+    year: int | None = None
+    name_ru: str
+    name_uz: str
+
+
+class HolidayCreate(BaseModel):
+    month: int = Field(ge=1, le=12)
+    day: int = Field(ge=1, le=31)
+    year: int | None = None
+    name_ru: str = Field(min_length=1, max_length=128)
+    name_uz: str = Field(min_length=1, max_length=128)
+
+
+# ---------- Telegram ----------
+
+class TelegramContactOut(ORMModel):
+    id: int
+    chat_id: int
+    tg_username: str | None = None
+    tg_first_name: str | None = None
+    started_at: Any
+    user: UserShort | None = None
+
+
+class TelegramLinkBody(BaseModel):
+    user_id: int
+
+
+class TelegramTestOut(BaseModel):
+    ok: bool
+    bot_username: str | None = None
+    detail: str | None = None

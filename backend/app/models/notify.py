@@ -16,14 +16,15 @@ class NotifyEvent:
     ORDER_RENAMED = "order.renamed"
     ORDER_SUCCESS = "order.success"
     ORDER_FAIL = "order.fail"
-    ORDER_OVERDUE = "order.overdue"
+    ORDER_OVERDUE = "order.overdue"  # joriy bosqich dedlayni o'tdi
+    ORDER_DEADLINE_OVERDUE = "order.deadline_overdue"  # proyektning umumiy dedlayni o'tdi
     ORDER_FILE = "order.file"
     CHAT_MESSAGE = "chat.message"
 
     ALL = [
         ORDER_CREATED, ORDER_STAGE_CHANGED, ORDER_ASSIGNED, ORDER_CLAIMED,
         ORDER_UNASSIGNED, ORDER_RENAMED, ORDER_SUCCESS, ORDER_FAIL,
-        ORDER_OVERDUE, ORDER_FILE, CHAT_MESSAGE,
+        ORDER_OVERDUE, ORDER_DEADLINE_OVERDUE, ORDER_FILE, CHAT_MESSAGE,
     ]
 
 
@@ -59,6 +60,8 @@ class NotifyTemplate(Base, TimestampMixin):
     recipients: Mapped[list] = mapped_column(JSONB, default=list)
     # ACTOR ning o'ziga ham yuborilsinmi (odatda yo'q)
     notify_actor: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Telegram orqali ham yuborilsinmi (standart holatda yo'q — ixtiyoriy/opt-in)
+    send_telegram: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # {order_number}, {order_title}, {stage}, {stage_prev}, {actor}, {responsible},
     # {patient}, {doctor}, {deadline} — o'rniga qo'yiladi

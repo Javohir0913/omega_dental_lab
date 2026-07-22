@@ -10,6 +10,7 @@ from sqlalchemy import (
     Table,
     Text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -62,6 +63,8 @@ class Order(Base, TimestampMixin):
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     stage_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     stage_entered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # `deadline` (umumiy proyekt dedlayni) o'tganda oxirgi marta qachon ogohlantirilgani
+    deadline_overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     priority: Mapped[int] = mapped_column(Integer, default=500, index=True)  # kam = tepada
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -72,10 +75,24 @@ class Order(Base, TimestampMixin):
     # yopilish sababi (Провал bo'lganda)
     close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # yumshoq o'chirish — 30 kun korzinkada turadi
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
     # kanban ustuni ichidagi qo'lda tartib (drag&drop)
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
+    # proyekt rasmi — bitta dona, forma title bilan patient orasida ko'rsatiladi
+    photo_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("files.id", ondelete="SET NULL"), nullable=True
+    )
+    photo: Mapped["FileAsset | None"] = relationship(  # noqa: F821
+        lazy="selectin", foreign_keys=[photo_file_id]
+    )
+
     services: Mapped[list["Service"]] = relationship(secondary=order_services, lazy="selectin")  # noqa: F821
+
+    # tanlangan tishlar — doim FDI kodlari (11..48) saqlanadi, displey yorlig'i sozlamadan olinadi
+    teeth: Mapped[list[int] | None] = mapped_column(JSONB, nullable=True)
 
 
 class OrderStageHistory(Base):
@@ -105,4 +122,5 @@ class OrderStageHistory(Base):
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
     was_overdue: Mapped[bool] = mapped_column(Boolean, default=False)
+    overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)

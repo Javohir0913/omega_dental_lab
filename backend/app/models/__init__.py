@@ -11,10 +11,12 @@ from app.models.custom_field import (
     StageRequirement,
 )
 from app.models.file import FileAsset, FileEntity
+from app.models.holiday import Holiday
 from app.models.log import ActivityLog, LogCategory, LogLevel
 from app.models.notify import Notification, NotifyEvent, NotifyTemplate, Recipient
 from app.models.order import Order, OrderStageHistory, order_services
 from app.models.setting import DEFAULT_SETTINGS, Setting
+from app.models.telegram import TelegramContact
 from app.models.user import (
     Permission,
     Role,
@@ -32,10 +34,12 @@ __all__ = [
     "CustomField", "CustomFieldValue", "FieldEntity", "FieldType",
     "RequirementMoment", "StageRequirement", "SYSTEM_ORDER_FIELDS",
     "FileAsset", "FileEntity",
+    "Holiday",
     "ActivityLog", "LogCategory", "LogLevel",
     "Notification", "NotifyEvent", "NotifyTemplate", "Recipient",
     "Order", "OrderStageHistory", "order_services",
     "Setting", "DEFAULT_SETTINGS",
+    "TelegramContact",
     "Permission", "Role", "User", "UserSession",
     "role_permissions", "user_services", "user_stages",
 ]

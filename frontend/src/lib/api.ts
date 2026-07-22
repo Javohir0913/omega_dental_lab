@@ -22,7 +22,24 @@ export const tokens = {
   },
 }
 
-export const api = axios.create({ baseURL: `${API_URL}/api/v1`, timeout: 30000 })
+export const api = axios.create({
+  baseURL: `${API_URL}/api/v1`,
+  timeout: 30000,
+  paramsSerializer: {
+    serialize: (params) => {
+      const sp = new URLSearchParams()
+      for (const [key, value] of Object.entries(params)) {
+        if (value === undefined || value === null) continue
+        if (Array.isArray(value)) {
+          for (const v of value) sp.append(key, String(v))
+        } else {
+          sp.append(key, String(value))
+        }
+      }
+      return sp.toString()
+    },
+  },
+})
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const t = tokens.access
@@ -132,4 +149,6 @@ const ERRORS: Record<string, { ru: string; uz: string }> = {
   },
   role_in_use: { ru: 'Роль используется сотрудниками', uz: 'Rol xodimlarda ishlatilyapti' },
   file_type_not_allowed: { ru: 'Такой тип файла запрещён', uz: 'Bunday fayl turi taqiqlangan' },
+  not_a_member: { ru: 'Вы не участник чата', uz: 'Siz chat a\'zosi emassiz' },
+  empty_message: { ru: 'Сообщение не может быть пустым', uz: 'Xabar bo\'sh bo\'lishi mumkin emas' },
 }

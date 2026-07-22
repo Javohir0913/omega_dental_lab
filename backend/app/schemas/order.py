@@ -49,11 +49,15 @@ class OrderCard(ORMModel):
     responsible: UserShort | None = None
     services: list[ServiceOut] = []
     custom_fields: dict = {}
+    photo: FileOut | None = None
+    teeth: list[int] | None = None
     is_overdue: bool = False
     can_move: bool = False
     can_claim: bool = False
     files_count: int = 0
+    has_3d_files: bool = False
     unread_messages: int = 0
+    deleted_at: datetime | None = None
 
 
 class OrderDetail(OrderCard):
@@ -91,6 +95,8 @@ class OrderCreate(BaseModel):
     color: str | None = None
     responsible_id: int | None = None
     stage_id: int | None = None  # bo'sh -> «Новый»
+    photo_file_id: int | None = None
+    teeth: list[int] = []
     custom_fields: dict = {}
 
 
@@ -103,6 +109,8 @@ class OrderUpdate(BaseModel):
     priority: int | None = None
     description: str | None = None
     color: str | None = None
+    photo_file_id: int | None = None
+    teeth: list[int] | None = None
     custom_fields: dict | None = None
 
 

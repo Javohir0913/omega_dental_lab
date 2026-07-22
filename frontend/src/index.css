@@ -75,4 +75,39 @@
   .chip {
     @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium;
   }
+
+  .scrollbar-kanban::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-kanban::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-[#c9ced6];
+  }
+  html.dark .scrollbar-kanban::-webkit-scrollbar-thumb {
+    @apply bg-[#39414f];
+  }
+
+  @media (max-width: 767px) {
+    html,
+    body,
+    #root {
+      min-width: 320px;
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+
+    .btn {
+      min-height: 2.5rem;
+    }
+
+    .input {
+      min-height: 2.75rem;
+      font-size: 16px;
+    }
+
+    .card > table {
+      min-width: 640px;
+    }
+  }
 }

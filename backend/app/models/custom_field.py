@@ -110,6 +110,7 @@ class StageRequirement(Base, TimestampMixin):
 
 SYSTEM_ORDER_FIELDS = [
     ("sys:title", "Название проекта", "Proyekt nomi"),
+    ("sys:photo_file_id", "Фото проекта", "Proyekt rasmi"),
     ("sys:patient_id", "Пациент", "Patsent"),
     ("sys:doctor_id", "Врач", "Vrach"),
     ("sys:services", "Услуги", "Xizmatlar"),

@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
-import { socket } from '@/lib/ws'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
-import { Avatar, Empty, Modal, Spinner } from '@/components/ui'
+import { Avatar, Empty, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import ChatPanel from '@/components/ChatPanel'
 import { fromNow } from '@/lib/format'
@@ -15,13 +14,14 @@ import type { ChatItem, Page, User } from '@/lib/types'
 export default function ChatsPage() {
   const t = useT()
   const lang = useLang((s) => s.lang)
-  const { can } = useAuth()
+  const { me, can } = useAuth()
   const { chatId } = useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
 
   const [filter, setFilter] = useState<'' | 'order' | 'direct'>('')
-  const [newDirect, setNewDirect] = useState(false)
+  const [hideClosed, setHideClosed] = useState(() => localStorage.getItem('omega_chats_hide_closed') === 'true')
+  const [opening, setOpening] = useState<number | null>(null)
 
   const { data: chats = [], isLoading } = useQuery({
     queryKey: ['chats', filter],
@@ -29,17 +29,52 @@ export default function ChatsPage() {
       (await api.get<ChatItem[]>('/chats', { params: { type: filter || undefined } })).data,
   })
 
-  useEffect(() => {
-    const off = socket.on('chat.message', () => qc.invalidateQueries({ queryKey: ['chats'] }))
-    return off
-  }, [qc])
+  // Shaxsiy bo'limda hali suhbat boshlanmagan aktiv xodimlarni ham ko'rsatamiz
+  const { data: allUsers } = useQuery({
+    queryKey: ['users-direct-list'],
+    queryFn: async () =>
+      (await api.get<Page<User>>('/users', { params: { is_active: true, size: 200 } })).data,
+    enabled: filter === 'direct' && can('chat.direct'),
+  })
 
   const active = chats.find((c) => c.id === Number(chatId))
+  const visibleChats = chats.filter(
+    (c) => !hideClosed || (!c.hidden && (c.type !== 'order' || !c.order_is_closed || c.unread > 0)),
+  )
+
+  const existingPeerIds = new Set(chats.filter((c) => c.peer).map((c) => c.peer!.id))
+  const otherUsers = (allUsers?.items ?? []).filter(
+    (u) => u.id !== me?.id && !existingPeerIds.has(u.id),
+  )
+
+  async function toggleHide(chat: ChatItem, e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      await api.post(`/chats/${chat.id}/hide`, { hidden: !chat.hidden })
+      qc.invalidateQueries({ queryKey: ['chats'] })
+    } catch (e2) {
+      toast(errText(e2, lang), 'error')
+    }
+  }
+
+  async function openDirect(userId: number) {
+    if (opening) return
+    setOpening(userId)
+    try {
+      const { data } = await api.post<{ id: number }>('/chats/direct', { user_id: userId })
+      qc.invalidateQueries({ queryKey: ['chats'] })
+      navigate(`/chats/${data.id}`)
+    } catch (e) {
+      toast(errText(e, lang), 'error')
+    } finally {
+      setOpening(null)
+    }
+  }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
+    <div className="flex h-[calc(100dvh-3.5rem)]">
       {/* Ro'yxat */}
-      <div className="flex w-72 shrink-0 flex-col border-r border-surface-border bg-white dark:border-[#2a3140] dark:bg-[#171c26]">
+      <div className={clsx('w-full shrink-0 flex-col border-r border-surface-border bg-white dark:border-[#2a3140] dark:bg-[#171c26] md:flex md:w-72', active ? 'hidden' : 'flex')}>
         <div className="flex items-center gap-1 border-b border-surface-border p-2 dark:border-[#2a3140]">
           {[
             { v: '' as const, l: t('all') },
@@ -60,29 +95,49 @@ export default function ChatsPage() {
             </button>
           ))}
           <div className="flex-1" />
-          {can('chat.direct') && (
-            <button
-              onClick={() => setNewDirect(true)}
-              className="rounded-md px-2 py-1 text-xs text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30"
-              title={lang === 'ru' ? 'Новый чат' : 'Yangi chat'}
-            >
-              ✎
-            </button>
-          )}
+          <button
+            onClick={() => {
+              const next = !hideClosed
+              setHideClosed(next)
+              localStorage.setItem('omega_chats_hide_closed', String(next))
+            }}
+            className={clsx(
+              'rounded-md px-2 py-1 text-xs transition-colors',
+              hideClosed
+                ? 'bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/30'
+                : 'text-ink-soft hover:bg-surface-muted dark:hover:bg-[#222836]',
+            )}
+            title={
+              lang === 'ru'
+                ? 'Скрыть закрытые проекты и скрытые чаты'
+                : 'Yopiq proyektlar va yashirilgan chatlarni yashirish'
+            }
+          >
+            {lang === 'ru' ? 'Скрыть закрытые' : 'Yopiqni yashirish'}
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <Spinner />
-          ) : chats.length === 0 ? (
+          ) : visibleChats.length === 0 && otherUsers.length === 0 ? (
             <Empty />
           ) : (
-            chats.map((c) => (
-              <button
+            <>
+            {visibleChats.map((c) => (
+              <div
                 key={c.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/chats/${c.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate(`/chats/${c.id}`)
+                  }
+                }}
                 className={clsx(
-                  'flex w-full items-start gap-2 border-b border-surface-border px-3 py-2.5 text-left transition-colors dark:border-[#2a3140]',
+                  'group flex w-full cursor-pointer items-start gap-2 border-b border-surface-border px-3 py-2.5 text-left transition-colors dark:border-[#2a3140]',
                   active?.id === c.id
                     ? 'bg-brand-50 dark:bg-brand-900/25'
                     : 'hover:bg-surface-muted dark:hover:bg-[#222836]',
@@ -111,17 +166,60 @@ export default function ChatsPage() {
                     {c.unread}
                   </span>
                 )}
-              </button>
-            ))
+
+                {c.type === 'order' && (
+                  <button
+                    onClick={(e) => toggleHide(c, e)}
+                    className="shrink-0 rounded px-1.5 py-1 text-[10px] text-ink-faint opacity-0 transition-opacity hover:bg-surface-muted hover:text-ink group-hover:opacity-100 dark:hover:bg-[#2a3140] dark:hover:text-[#e6e9ee]"
+                    title={c.hidden ? (lang === 'ru' ? 'Показать чат' : 'Chatni ko\'rsatish') : (lang === 'ru' ? 'Скрыть чат' : 'Chatni yashirish')}
+                  >
+                    {c.hidden ? (lang === 'ru' ? 'Показать' : 'Ko\'rsatish') : (lang === 'ru' ? 'Скрыть' : 'Yashirish')}
+                  </button>
+                )}
+              </div>
+            ))}
+
+            {filter === 'direct' && otherUsers.length > 0 && (
+              <>
+                {visibleChats.length > 0 && (
+                  <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
+                    {lang === 'ru' ? 'Все сотрудники' : 'Boshqa xodimlar'}
+                  </div>
+                )}
+                {otherUsers.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => openDirect(u.id)}
+                    disabled={opening === u.id}
+                    className="flex w-full items-center gap-2 border-b border-surface-border px-3 py-2.5 text-left transition-colors hover:bg-surface-muted disabled:opacity-50 dark:border-[#2a3140] dark:hover:bg-[#222836]"
+                  >
+                    <Avatar name={u.full_name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-medium">{u.full_name}</div>
+                      <div className="truncate text-[10px] text-ink-faint">
+                        {lang === 'ru' ? u.role.name_ru : u.role.name_uz}
+                      </div>
+                    </div>
+                    {opening === u.id && (
+                      <div className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500" />
+                    )}
+                  </button>
+                ))}
+              </>
+            )}
+            </>
           )}
         </div>
       </div>
 
       {/* Suhbat */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={clsx('min-w-0 flex-1 flex-col md:flex', active ? 'flex' : 'hidden')}>
         {active ? (
           <>
             <div className="flex h-12 items-center gap-2 border-b border-surface-border px-4 dark:border-[#2a3140]">
+              <button onClick={() => navigate('/chats')} className="rounded p-1.5 text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836] md:hidden" aria-label="Back to chats">
+                ←
+              </button>
               <div className="min-w-0 flex-1 truncate text-sm font-medium">{active.title}</div>
               {active.order_id && (
                 <button
@@ -133,7 +231,7 @@ export default function ChatsPage() {
               )}
             </div>
             <div className="min-h-0 flex-1">
-              <ChatPanel chatId={active.id} />
+              <ChatPanel chatId={active.id} chatType={active.type} onClose={() => navigate('/chats')} />
             </div>
           </>
         ) : (
@@ -143,77 +241,6 @@ export default function ChatsPage() {
         )}
       </div>
 
-      {newDirect && (
-        <NewDirectModal
-          onClose={() => setNewDirect(false)}
-          onDone={(id) => {
-            qc.invalidateQueries({ queryKey: ['chats'] })
-            navigate(`/chats/${id}`)
-          }}
-        />
-      )}
     </div>
-  )
-}
-
-function NewDirectModal({
-  onClose,
-  onDone,
-}: {
-  onClose: () => void
-  onDone: (chatId: number) => void
-}) {
-  const t = useT()
-  const lang = useLang((s) => s.lang)
-  const me = useAuth((s) => s.me)
-  const [q, setQ] = useState('')
-
-  const { data } = useQuery({
-    queryKey: ['users-chat', q],
-    queryFn: async () =>
-      (await api.get<Page<User>>('/users', { params: { q: q || undefined, is_active: true, size: 50 } }))
-        .data,
-  })
-
-  async function open(userId: number) {
-    try {
-      const { data } = await api.post<{ id: number }>('/chats/direct', { user_id: userId })
-      onDone(data.id)
-      onClose()
-    } catch (e) {
-      toast(errText(e, lang), 'error')
-    }
-  }
-
-  const users = (data?.items ?? []).filter((u) => u.id !== me?.id)
-
-  return (
-    <Modal open onClose={onClose} title={lang === 'ru' ? 'Новый чат' : 'Yangi chat'}>
-      <input
-        className="input mb-3"
-        placeholder={t('search')}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        autoFocus
-      />
-      <div className="max-h-80 space-y-1 overflow-y-auto">
-        {users.length === 0 && <Empty />}
-        {users.map((u) => (
-          <button
-            key={u.id}
-            onClick={() => open(u.id)}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836]"
-          >
-            <Avatar name={u.full_name} />
-            <div className="min-w-0">
-              <div className="truncate">{u.full_name}</div>
-              <div className="text-[10px] text-ink-faint">
-                {lang === 'ru' ? u.role.name_ru : u.role.name_uz}
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-    </Modal>
   )
 }

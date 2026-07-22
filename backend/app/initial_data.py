@@ -16,6 +16,7 @@ from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
 from app.models import (
     DEFAULT_SETTINGS,
+    Holiday,
     Permission,
     Role,
     Setting,
@@ -23,6 +24,14 @@ from app.models import (
     StageKind,
     User,
 )
+
+DEFAULT_HOLIDAYS: list[tuple[int, int, str, str]] = [
+    (1, 1, "Новый год", "Yangi yil"),
+    (1, 2, "Новый год (2-й день)", "Yangi yil (2-kun)"),
+    (1, 14, "День защитников Родины", "Vatan himoyachilari kuni"),
+    (3, 8, "Международный женский день", "Xalqaro xotin-qizlar kuni"),
+    (3, 21, "Навруз", "Navro'z"),
+]
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger("seed")
@@ -138,6 +147,18 @@ async def seed_settings(db) -> None:  # noqa: ANN001
     await db.flush()
 
 
+async def seed_holidays(db) -> None:  # noqa: ANN001
+    for month, day, name_ru, name_uz in DEFAULT_HOLIDAYS:
+        res = await db.execute(
+            select(Holiday).where(
+                Holiday.month == month, Holiday.day == day, Holiday.year.is_(None)
+            )
+        )
+        if res.scalar_one_or_none() is None:
+            db.add(Holiday(month=month, day=day, year=None, name_ru=name_ru, name_uz=name_uz))
+    await db.flush()
+
+
 async def seed_superadmin(db) -> None:  # noqa: ANN001
     res = await db.execute(select(Role).where(Role.code == "super_admin"))
     role = res.scalar_one()
@@ -170,6 +191,7 @@ async def main() -> None:
         await seed_stages(db)
         await seed_services(db)
         await seed_settings(db)
+        await seed_holidays(db)
         await seed_superadmin(db)
         await db.commit()
     log.info("Seed tayyor.")

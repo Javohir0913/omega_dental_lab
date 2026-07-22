@@ -25,6 +25,7 @@ const TYPE_LABEL: Record<string, { ru: string; uz: string }> = {
   select: { ru: 'Список (один)', uz: 'Ro‘yxat (bitta)' },
   multiselect: { ru: 'Список (несколько)', uz: 'Ro‘yxat (bir nechta)' },
   user: { ru: 'Сотрудник', uz: 'Xodim' },
+  file: { ru: 'Файл', uz: 'Fayl' },
 }
 
 export default function AdminFields() {
@@ -99,7 +100,10 @@ export default function AdminFields() {
                 <div className="mt-0.5 flex gap-2 text-[11px] text-ink-faint">
                   {f.show_in_card && <span>▦ карточка</span>}
                   {f.show_in_list && <span>☰ список</span>}
-                  {f.options && <span>{f.options.length} вариантов</span>}
+                  {f.type === 'file' && (f.options as any)?.[0]?.['multiple']
+                    ? <span>⊕ несколько</span>
+                    : Array.isArray(f.options) && f.options.length > 0 && <span>{f.options.length} вариантов</span>
+                  }
                 </div>
               </div>
 
@@ -188,10 +192,12 @@ function FieldForm({
     sort: field?.sort ?? 100,
     is_active: field?.is_active ?? true,
   })
-  const [options, setOptions] = useState(field?.options ?? [])
+  const [options, setOptions] = useState<Record<string, unknown>[]>(field?.options ?? [])
   const [busy, setBusy] = useState(false)
 
   const needOptions = form.type === 'select' || form.type === 'multiselect'
+  const isFileType = form.type === 'file'
+  const fileMultiple = isFileType && options?.[0]?.['multiple'] === true
 
   async function submit() {
     setBusy(true)
@@ -200,7 +206,7 @@ function FieldForm({
       label_uz: form.label_uz.trim(),
       hint_ru: form.hint_ru || null,
       hint_uz: form.hint_uz || null,
-      options: needOptions ? options : null,
+      options: needOptions ? options : isFileType ? options : null,
       required_on_create: form.required_on_create,
       show_in_card: form.show_in_card,
       show_in_list: form.show_in_list,
@@ -323,7 +329,7 @@ function FieldForm({
                 <input
                   className="input w-28 font-mono text-xs"
                   placeholder="код"
-                  value={o.value}
+                  value={String(o.value ?? '')}
                   onChange={(e) => {
                     const next = [...options]
                     next[i] = { ...o, value: e.target.value }
@@ -333,7 +339,7 @@ function FieldForm({
                 <input
                   className="input flex-1"
                   placeholder="RU"
-                  value={o.label_ru}
+                  value={String(o.label_ru ?? '')}
                   onChange={(e) => {
                     const next = [...options]
                     next[i] = { ...o, label_ru: e.target.value }
@@ -343,7 +349,7 @@ function FieldForm({
                 <input
                   className="input flex-1"
                   placeholder="UZ"
-                  value={o.label_uz}
+                  value={String(o.label_uz ?? '')}
                   onChange={(e) => {
                     const next = [...options]
                     next[i] = { ...o, label_uz: e.target.value }
@@ -368,6 +374,17 @@ function FieldForm({
             </button>
           </div>
         </Field>
+      )}
+
+      {isFileType && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={fileMultiple}
+            onChange={(e) => setOptions(e.target.checked ? [{ multiple: true }] : [])}
+          />
+          {lang === 'ru' ? 'Несколько файлов' : 'Bir nechta fayl'}
+        </label>
       )}
 
       <div className="space-y-1.5">

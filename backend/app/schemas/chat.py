@@ -39,9 +39,15 @@ class ChatOut(ORMModel):
     last_message_at: datetime | None = None
     last_message: str | None = None
     unread: int = 0
+    order_is_closed: bool = False
+    hidden: bool = False
     members: list[UserShort] = []
     peer: UserShort | None = None  # DIRECT uchun suhbatdosh
 
 
 class DirectOpen(BaseModel):
     user_id: int
+
+
+class HideChat(BaseModel):
+    hidden: bool

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
@@ -8,7 +9,8 @@ import { Avatar } from '@/components/ui'
 import NotificationBell from '@/components/NotificationBell'
 import { api } from '@/lib/api'
 import { socket } from '@/lib/ws'
-import type { Lang } from '@/lib/types'
+import { onChatMessage, patchChatRead } from '@/lib/chatUpdates'
+import type { ChatMessage, Lang } from '@/lib/types'
 
 interface NavItem {
   to: string
@@ -36,32 +38,69 @@ export default function Layout() {
   const t = useT()
   const { lang, setLang } = useLang()
   const navigate = useNavigate()
+  const location = useLocation()
+  const qc = useQueryClient()
   const [collapsed, setCollapsed] = useState(localStorage.getItem('omega_nav') === 'off')
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [dark, setDark] = useState(document.documentElement.classList.contains('dark'))
   const [unreadChats, setUnreadChats] = useState(0)
 
   const showAdmin = ADMIN_PERMS.some((p) => can(p))
+  const navCollapsed = collapsed && !mobileOpen
 
   useEffect(() => {
     localStorage.setItem('omega_nav', collapsed ? 'off' : 'on')
   }, [collapsed])
 
   useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
     localStorage.setItem('omega_theme', dark ? 'dark' : 'light')
   }, [dark])
 
-  // o'qilmagan chat xabarlari — kirishda va har yangi xabarda
+  // o'qilmagan chat xabarlari — kirishda va har bir chat hodisasida
+  const refreshUnread = () => {
+    api
+      .get('/chats/unread/total')
+      .then(({ data }) => setUnreadChats(data.total))
+      .catch(() => {})
+  }
+
   useEffect(() => {
-    const refresh = () =>
-      api
-        .get('/chats/unread/total')
-        .then(({ data }) => setUnreadChats(data.total))
-        .catch(() => {})
-    refresh()
-    const off = socket.on('chat.message', refresh)
-    return off
+    refreshUnread()
   }, [])
+
+  // Chatlar ro'yxati cache'ini va o'qilmaganlar sonini synchronous yangilab boramiz (Layout har doim mounted)
+  useEffect(() => {
+    if (!me) return
+    const off1 = socket.on('chat.message', (m: ChatMessage) => {
+      onChatMessage(qc, me.id, m, refreshUnread)
+    })
+
+    const off2 = socket.on('chat.message_deleted', () => {
+      refreshUnread()
+      qc.invalidateQueries({ queryKey: ['chats'] })
+    })
+
+    const off3 = socket.on('chat.message_edited', () => {
+      qc.invalidateQueries({ queryKey: ['chats'] })
+    })
+
+    const off4 = socket.on('chat.read', (data: { chat_id: number }) => {
+      refreshUnread()
+      patchChatRead(qc, data.chat_id)
+    })
+
+    return () => {
+      off1()
+      off2()
+      off3()
+      off4()
+    }
+  }, [qc, me])
 
   async function switchLang(next: Lang) {
     setLang(next)
@@ -74,23 +113,28 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-screen">
+      {mobileOpen && <button className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu" />}
       {/* Chap menyu */}
       <aside
         className={clsx(
-          'sticky top-0 flex h-screen shrink-0 flex-col border-r border-surface-border bg-white transition-[width] dark:border-[#2a3140] dark:bg-[#171c26]',
-          collapsed ? 'w-14' : 'w-56',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh w-64 shrink-0 -translate-x-full flex-col border-r border-surface-border bg-white transition-[width,transform] dark:border-[#2a3140] dark:bg-[#171c26] md:sticky md:top-0 md:h-screen md:translate-x-0',
+          mobileOpen && 'translate-x-0 shadow-2xl',
+          navCollapsed ? 'md:w-14' : 'md:w-56',
         )}
       >
         <div className="flex h-14 items-center gap-2 border-b border-surface-border px-3 dark:border-[#2a3140]">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded bg-brand-500 text-xs font-bold text-white">
             Ω
           </div>
-          {!collapsed && (
+          {!navCollapsed && (
             <div className="truncate text-sm font-semibold leading-tight">
               OMEGA
               <div className="text-[10px] font-normal text-ink-faint">DENTAL LAB</div>
             </div>
           )}
+          <button onClick={() => setMobileOpen(false)} className="ml-auto rounded p-2 text-ink-faint hover:bg-surface-muted md:hidden" aria-label="Close menu">
+            ×
+          </button>
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
@@ -107,11 +151,11 @@ export default function Layout() {
                     : 'text-ink-soft hover:bg-surface-muted dark:hover:bg-[#222836]',
                 )
               }
-              title={collapsed ? t(n.key) : undefined}
+              title={navCollapsed ? t(n.key) : undefined}
             >
               <span className="w-4 shrink-0 text-center text-[13px]">{n.icon}</span>
-              {!collapsed && <span className="truncate">{t(n.key)}</span>}
-              {!collapsed && n.to === '/chats' && unreadChats > 0 && (
+              {!navCollapsed && <span className="truncate">{t(n.key)}</span>}
+              {!navCollapsed && n.to === '/chats' && unreadChats > 0 && (
                 <span className="ml-auto rounded-full bg-brand-500 px-1.5 text-[10px] text-white">
                   {unreadChats}
                 </span>
@@ -128,17 +172,17 @@ export default function Layout() {
                   isActive ? 'font-medium text-brand-700' : 'text-ink-soft hover:text-ink',
                 )
               }
-              title={collapsed ? t('nav_admin') : undefined}
+              title={navCollapsed ? t('nav_admin') : undefined}
             >
               <span className="w-4 shrink-0 text-center text-[13px]">⚙</span>
-              {!collapsed && <span>{t('nav_admin')}</span>}
+              {!navCollapsed && <span>{t('nav_admin')}</span>}
             </NavLink>
           )}
         </nav>
 
         <button
           onClick={() => setCollapsed((v) => !v)}
-          className="border-t border-surface-border py-2 text-xs text-ink-faint hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#222836]"
+          className="hidden border-t border-surface-border py-2 text-xs text-ink-faint hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#222836] md:block"
         >
           {collapsed ? '»' : '«'}
         </button>
@@ -146,7 +190,10 @@ export default function Layout() {
 
       {/* O'ng qism */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-surface-border bg-white/90 px-4 backdrop-blur dark:border-[#2a3140] dark:bg-[#171c26]/90">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-surface-border bg-white/90 px-3 backdrop-blur dark:border-[#2a3140] dark:bg-[#171c26]/90 sm:gap-3 sm:px-4">
+          <button onClick={() => setMobileOpen(true)} className="grid h-9 w-9 place-items-center rounded-lg border border-surface-border text-lg text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836] md:hidden" aria-label="Open menu">
+            ☰
+          </button>
           <div className="flex-1" />
 
           {/* til */}
@@ -169,7 +216,7 @@ export default function Layout() {
 
           <button
             onClick={() => setDark((v) => !v)}
-            className="rounded-lg border border-surface-border px-2 py-1 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
+            className="min-h-9 rounded-lg border border-surface-border px-2 py-1 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
             title={dark ? 'Light' : 'Dark'}
           >
             {dark ? '☀' : '☾'}
@@ -179,7 +226,7 @@ export default function Layout() {
 
           <button
             onClick={() => navigate('/profile')}
-            className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-surface-muted dark:hover:bg-[#222836]"
+            className="flex min-h-9 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-surface-muted dark:hover:bg-[#222836]"
           >
             <Avatar name={me?.full_name} />
             <div className="hidden text-left leading-tight sm:block">
@@ -195,14 +242,14 @@ export default function Layout() {
               await logout()
               navigate('/login', { replace: true })
             }}
-            className="rounded-lg border border-surface-border px-2 py-1 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
+            className="min-h-9 rounded-lg border border-surface-border px-2 py-1 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
             title={t('logout')}
           >
             ⏻
           </button>
         </header>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

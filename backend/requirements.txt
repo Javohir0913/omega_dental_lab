@@ -10,7 +10,12 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.20
 redis==5.2.1
+httpx==0.28.1
 user-agents==2.2.0
 aiofiles==24.1.0
 email-validator==2.2.0
 greenlet==3.1.1
+Pillow==11.1.0
+pillow-heif==0.22.0
+numpy==1.26.4
+rawpy==0.21.0

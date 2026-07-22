@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.realtime.hub import hub
 from app.services import notify as notify_svc
+from app.services import workcalendar
 from app.services.logger import log_activity
 from app.services.settings_store import get_setting
 
@@ -132,13 +133,19 @@ async def close_history(db: AsyncSession, order: Order, comment: str | None = No
     await db.flush()
 
 
-def apply_stage_deadline(order: Order, stage: Stage) -> None:
+async def apply_stage_deadline(db: AsyncSession, order: Order, stage: Stage) -> None:
     order.stage_entered_at = now_utc()
-    order.stage_deadline = (
-        order.stage_entered_at + timedelta(hours=stage.duration_hours)
-        if stage.duration_hours
-        else None
-    )
+    if not stage.duration_hours:
+        order.stage_deadline = None
+        return
+
+    cal = await workcalendar.load_calendar(db)
+    if cal.enabled:
+        order.stage_deadline = workcalendar.add_business_hours(
+            order.stage_entered_at, stage.duration_hours, cal
+        )
+    else:
+        order.stage_deadline = order.stage_entered_at + timedelta(hours=stage.duration_hours)
 
 
 # --------------------------------------------------------------------------
@@ -167,7 +174,18 @@ async def add_chat_member(db: AsyncSession, chat: Chat, user_id: int) -> None:
         await db.flush()
 
 
-async def system_message(db: AsyncSession, order: Order, text: str) -> None:
+async def hide_order_chat(db: AsyncSession, order: Order) -> None:
+    """Proyekt muvaffaqiyatli yakunlanganda uning chatini barcha a'zolarda avtomatik yashiradi."""
+    res = await db.execute(select(Chat.id).where(Chat.order_id == order.id))
+    chat_id = res.scalar_one_or_none()
+    if chat_id is None:
+        return
+    res = await db.execute(select(ChatMember).where(ChatMember.chat_id == chat_id))
+    for member in res.scalars().all():
+        member.hidden = True
+
+
+async def system_message(db: AsyncSession, order: Order, text: str, actor_id: int | None = None) -> None:
     """Proyekt chatiga kulrang tizim qatorchasi."""
     res = await db.execute(select(Chat).where(Chat.order_id == order.id))
     chat = res.scalar_one_or_none()
@@ -177,18 +195,21 @@ async def system_message(db: AsyncSession, order: Order, text: str) -> None:
     db.add(msg)
     chat.last_message_at = msg.created_at
     await db.flush()
-    await hub.publish(
-        f"chat:{chat.id}",
-        "chat.message",
-        {
-            "id": msg.id,
-            "chat_id": chat.id,
-            "text": msg.text,
-            "is_system": True,
-            "author": None,
-            "created_at": msg.created_at.isoformat(),
-        },
-    )
+    payload = {
+        "id": msg.id,
+        "chat_id": chat.id,
+        "order_id": chat.order_id,
+        "text": msg.text,
+        "is_system": True,
+        "author": None,
+        "created_at": msg.created_at.isoformat(),
+    }
+    await hub.publish(f"chat:{chat.id}", "chat.message", payload)
+    res_m = await db.execute(select(ChatMember).where(ChatMember.chat_id == chat.id))
+    for member in res_m.scalars().all():
+        if actor_id is not None and member.user_id == actor_id:
+            member.last_read_message_id = msg.id
+        await hub.publish(f"user:{member.user_id}", "chat.message", payload)
 
 
 # --------------------------------------------------------------------------
@@ -221,7 +242,7 @@ async def move_to_stage(
 
     order.stage_id = to_stage.id
     order.stage = to_stage
-    apply_stage_deadline(order, to_stage)
+    await apply_stage_deadline(db, order, to_stage)
 
     # Yangi bosqich mas'uli:
     #  1) chaqiruvda aniq berilgan bo'lsa — o'sha
@@ -235,6 +256,7 @@ async def move_to_stage(
         order.is_closed = True
         order.closed_at = now_utc()
         order.close_reason = None
+        await hide_order_chat(db, order)
     elif to_stage.kind == StageKind.FAIL:
         order.is_closed = True
         order.closed_at = now_utc()
@@ -272,6 +294,7 @@ async def move_to_stage(
         f"Этап: {from_stage.name_ru} → {to_stage.name_ru}"
         + (f" · {order.responsible.full_name}" if order.responsible else "")
         + (f"\n{comment}" if comment else ""),
+        actor_id=actor.id,
     )
 
     if order.responsible_id:
@@ -333,7 +356,7 @@ async def claim(db: AsyncSession, order: Order, user: User, request=None) -> Ord
         message_uz=f"{user.full_name} proyektni {order.stage.name_uz} bosqichida oldi",
         request=request,
     )
-    await system_message(db, order, f"{user.full_name} взял проект в работу")
+    await system_message(db, order, f"{user.full_name} взял проект в работу", actor_id=user.id)
     await notify_svc.notify(
         db, NotifyEvent.ORDER_CLAIMED, order=order, actor=user, stage_id=order.stage_id
     )
@@ -381,7 +404,7 @@ async def assign(
         meta={"from": old_id, "to": order.responsible_id},
         request=request,
     )
-    await system_message(db, order, f"Ответственный: {name}")
+    await system_message(db, order, f"Ответственный: {name}", actor_id=actor.id)
     await notify_svc.notify(
         db,
         NotifyEvent.ORDER_ASSIGNED if user_id else NotifyEvent.ORDER_UNASSIGNED,
@@ -418,11 +441,16 @@ async def broadcast_order(order: Order, event: str, extra: dict) -> None:
 
 
 async def check_overdue(db: AsyncSession) -> int:
-    """Fon vazifasi: dedlayni o'tgan proyektlar bo'yicha ogohlantirish."""
+    """Fon vazifasi: dedlayni o'tgan proyektlar bo'yicha (takrorlanuvchi) ogohlantirish."""
     now = now_utc()
+    reminder_hours = float(await get_setting(db, "overdue_reminder_hours", 24))
+    # Mas'ul biriktirilmagan yoki HR yo'q bo'lsa ham, hech kim bildirishnomasiz qolmasin.
+    fallback_ids = await notify_svc.resolve_recipients(db, ["role:hr", "role:super_admin"])
+
     res = await db.execute(
         select(Order).where(
             Order.is_closed.is_(False),
+            Order.deleted_at.is_(None),
             Order.stage_deadline.is_not(None),
             Order.stage_deadline < now,
         )
@@ -430,18 +458,24 @@ async def check_overdue(db: AsyncSession) -> int:
     orders = list(res.scalars().all())
     count = 0
     for order in orders:
-        # bir marta ogohlantiramiz: history'da belgi qo'yamiz
         h = await db.execute(
             select(OrderStageHistory)
             .where(OrderStageHistory.order_id == order.id, OrderStageHistory.left_at.is_(None))
             .order_by(OrderStageHistory.entered_at.desc())
         )
         row = h.scalars().first()
-        if row is None or row.was_overdue:
+        if row is None:
             continue
+        if row.overdue_notified_at is not None and (
+            now - row.overdue_notified_at < timedelta(hours=reminder_hours)
+        ):
+            continue
+
         row.was_overdue = True
+        row.overdue_notified_at = now
         await notify_svc.notify(
-            db, NotifyEvent.ORDER_OVERDUE, order=order, stage_id=order.stage_id
+            db, NotifyEvent.ORDER_OVERDUE, order=order, stage_id=order.stage_id,
+            extra_user_ids=list(fallback_ids),
         )
         await log_activity(
             db,
@@ -452,6 +486,44 @@ async def check_overdue(db: AsyncSession) -> int:
             order_id=order.id,
             message_ru=f"Просрочен дедлайн этапа {order.stage.name_ru}",
             message_uz=f"{order.stage.name_uz} bosqichi dedlayni o'tdi",
+        )
+        count += 1
+    await db.commit()
+    return count
+
+
+async def check_deadline_overdue(db: AsyncSession) -> int:
+    """Fon vazifasi: proyektning UMUMIY dedlayni (stage_deadline emas) o'tganda adminga (takrorlanuvchi) ogohlantirish."""
+    now = now_utc()
+    reminder_hours = float(await get_setting(db, "order_deadline_reminder_hours", 24))
+
+    res = await db.execute(
+        select(Order).where(
+            Order.is_closed.is_(False),
+            Order.deleted_at.is_(None),
+            Order.deadline.is_not(None),
+            Order.deadline < now,
+        )
+    )
+    orders = list(res.scalars().all())
+    count = 0
+    for order in orders:
+        if order.deadline_overdue_notified_at is not None and (
+            now - order.deadline_overdue_notified_at < timedelta(hours=reminder_hours)
+        ):
+            continue
+
+        order.deadline_overdue_notified_at = now
+        await notify_svc.notify(db, NotifyEvent.ORDER_DEADLINE_OVERDUE, order=order, stage_id=order.stage_id)
+        await log_activity(
+            db,
+            action="order.deadline_overdue",
+            category=LogCategory.ORDER,
+            level=LogLevel.WARNING,
+            is_success=False,
+            order_id=order.id,
+            message_ru=f"Просрочен общий дедлайн проекта {order.number}",
+            message_uz=f"{order.number} proyektining umumiy dedlayni o'tdi",
         )
         count += 1
     await db.commit()

@@ -17,6 +17,7 @@ export default function AdminNotify() {
   const [stageId, setStageId] = useState<number | ''>('')
   const [form, setForm] = useState<Partial<NotifyTemplate>>({})
   const [busy, setBusy] = useState(false)
+  const [activeField, setActiveField] = useState<'title_ru' | 'title_uz' | 'body_ru' | 'body_uz'>('body_ru')
 
   const { data: meta, isLoading } = useQuery({
     queryKey: ['notify-meta'],
@@ -39,7 +40,7 @@ export default function AdminNotify() {
   useEffect(() => {
     if (!event) return
     const found = templates.find(
-      (x) => x.event === event && (x.stage_id ?? '') === (stageId === '' ? null : stageId),
+      (x) => x.event === event && x.stage_id === (stageId === '' ? null : stageId),
     )
     setForm(
       found ?? {
@@ -48,6 +49,7 @@ export default function AdminNotify() {
         is_active: true,
         recipients: [],
         notify_actor: false,
+        send_telegram: false,
         title_ru: '',
         title_uz: '',
         body_ru: '',
@@ -65,6 +67,7 @@ export default function AdminNotify() {
         is_active: form.is_active ?? true,
         recipients: form.recipients ?? [],
         notify_actor: form.notify_actor ?? false,
+        send_telegram: form.send_telegram ?? false,
         title_ru: form.title_ru ?? '',
         title_uz: form.title_uz ?? '',
         body_ru: form.body_ru ?? '',
@@ -107,9 +110,9 @@ export default function AdminNotify() {
   const configured = new Set(templates.map((x) => x.event))
 
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-col gap-4 md:flex-row">
       {/* Hodisalar */}
-      <div className="w-60 shrink-0 space-y-1">
+      <div className="grid shrink-0 grid-cols-1 gap-1 sm:grid-cols-2 md:block md:w-60 md:space-y-1">
         {(meta?.events ?? []).map((e) => (
           <button
             key={e.code}
@@ -202,12 +205,28 @@ export default function AdminNotify() {
               : 'Harakatni qilgan odamga ham yuborilsin'}
           </label>
 
-          <Field label={t('placeholders')}>
+          <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.send_telegram ?? false}
+              onChange={(e) => setForm({ ...form, send_telegram: e.target.checked })}
+            />
+            {lang === 'ru' ? 'Отправлять также в Telegram' : 'Telegram orqali ham yuborilsin'}
+          </label>
+
+          <Field
+            label={t('placeholders')}
+            hint={
+              lang === 'ru'
+                ? `Вставится в поле: ${activeField}. Кликните сначала в нужное поле ниже.`
+                : `Quyidagi qaysi maydonga qo'shilishi: ${activeField}. Avval kerakli maydonga bosing.`
+            }
+          >
             <div className="flex flex-wrap gap-1">
               {(meta?.placeholders ?? []).map((p) => (
                 <button
                   key={p.key}
-                  onClick={() => insert('body_ru', p.key)}
+                  onClick={() => insert(activeField, p.key)}
                   className="chip border border-surface-border font-mono text-ink-soft hover:border-brand-300 hover:text-brand-600 dark:border-[#2f3745]"
                   title={lang === 'ru' ? p.label_ru : p.label_uz}
                 >
@@ -222,6 +241,7 @@ export default function AdminNotify() {
               <input
                 className="input"
                 value={form.title_ru ?? ''}
+                onFocus={() => setActiveField('title_ru')}
                 onChange={(e) => setForm({ ...form, title_ru: e.target.value })}
               />
             </Field>
@@ -229,6 +249,7 @@ export default function AdminNotify() {
               <input
                 className="input"
                 value={form.title_uz ?? ''}
+                onFocus={() => setActiveField('title_uz')}
                 onChange={(e) => setForm({ ...form, title_uz: e.target.value })}
               />
             </Field>
@@ -236,6 +257,7 @@ export default function AdminNotify() {
               <textarea
                 className="input min-h-[80px]"
                 value={form.body_ru ?? ''}
+                onFocus={() => setActiveField('body_ru')}
                 onChange={(e) => setForm({ ...form, body_ru: e.target.value })}
               />
             </Field>
@@ -243,6 +265,7 @@ export default function AdminNotify() {
               <textarea
                 className="input min-h-[80px]"
                 value={form.body_uz ?? ''}
+                onFocus={() => setActiveField('body_uz')}
                 onChange={(e) => setForm({ ...form, body_uz: e.target.value })}
               />
             </Field>

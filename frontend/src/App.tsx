@@ -12,7 +12,9 @@ import KanbanPage from '@/pages/Kanban'
 import OrdersPage from '@/pages/Orders'
 import OrderPage from '@/pages/Order'
 import PatientsPage from '@/pages/Patients'
+import PatientDetailPage from '@/pages/PatientDetail'
 import DoctorsPage from '@/pages/Doctors'
+import DoctorDetailPage from '@/pages/DoctorDetail'
 import ServicesPage from '@/pages/Services'
 import UsersPage from '@/pages/Users'
 import ChatsPage from '@/pages/Chats'
@@ -81,7 +83,9 @@ export default function App() {
         <Route path="orders" element={<OrdersPage />} />
         <Route path="orders/:id" element={<OrderPage />} />
         <Route path="patients" element={<Protected perm="patient.view"><PatientsPage /></Protected>} />
+        <Route path="patients/:id" element={<Protected perm="patient.view"><PatientDetailPage /></Protected>} />
         <Route path="doctors" element={<Protected perm="doctor.view"><DoctorsPage /></Protected>} />
+        <Route path="doctors/:id" element={<Protected perm="doctor.view"><DoctorDetailPage /></Protected>} />
         <Route path="services" element={<Protected perm="service.view"><ServicesPage /></Protected>} />
         <Route path="users" element={<Protected perm="user.view"><UsersPage /></Protected>} />
         <Route path="chats" element={<ChatsPage />} />

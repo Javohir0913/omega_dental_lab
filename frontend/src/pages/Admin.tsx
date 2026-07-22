@@ -9,6 +9,7 @@ import AdminRequirements from '@/pages/admin/Requirements'
 import AdminRoles from '@/pages/admin/Roles'
 import AdminNotify from '@/pages/admin/Notify'
 import AdminSettings from '@/pages/admin/Settings'
+import AdminTelegram from '@/pages/admin/Telegram'
 
 export default function AdminPage() {
   const t = useT()
@@ -23,6 +24,7 @@ export default function AdminPage() {
     { value: 'roles', label: t('admin_roles'), perm: 'admin.roles' },
     { value: 'notify', label: t('admin_notify'), perm: 'admin.notify' },
     { value: 'settings', label: t('admin_settings'), perm: 'admin.settings' },
+    { value: 'telegram', label: t('admin_telegram'), perm: 'admin.settings' },
   ].filter((s) => can(s.perm))
 
   if (sections.length === 0) return <Navigate to="/" replace />
@@ -44,6 +46,7 @@ export default function AdminPage() {
           <Route path="roles" element={<AdminRoles />} />
           <Route path="notify" element={<AdminNotify />} />
           <Route path="settings" element={<AdminSettings />} />
+          <Route path="telegram" element={<AdminTelegram />} />
         </Routes>
       </div>
     </div>

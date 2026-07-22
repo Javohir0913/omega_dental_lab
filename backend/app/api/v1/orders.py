@@ -1,16 +1,19 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
 from app.models import (
+    DEFAULT_SETTINGS,
     Chat,
+    ChatMember,
     FileAsset,
     FileEntity,
     LogCategory,
+    Message,
     NotifyEvent,
     Order,
     OrderStageHistory,
@@ -37,6 +40,7 @@ from app.services import requirements as req_svc
 from app.services.custom_fields import get_values, get_values_bulk, set_values
 from app.services.logger import log_activity
 from app.services.notify import notify
+from app.services.settings_store import get_setting
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -65,7 +69,7 @@ def _visibility_filter(query, user: User):  # noqa: ANN001
 async def _get_order(db, order_id: int, user: User) -> Order:  # noqa: ANN001
     res = await db.execute(select(Order).where(Order.id == order_id))
     order = res.scalar_one_or_none()
-    if order is None:
+    if order is None or order.deleted_at is not None:
         raise HTTPException(404, "order_not_found")
 
     if not (user.is_super or user.has_perm("order.view.all")):
@@ -92,7 +96,41 @@ def _decorate(card: OrderCard, order: Order, user: User) -> OrderCard:
         and (user.is_super or user.has_perm("order.claim"))
         and svc.can_user_work_stage(user, order.stage)
     )
+    if card.photo is not None:
+        card.photo = card.photo.model_copy(update={"url": f"/api/v1/files/{card.photo.id}"})
     return card
+
+
+async def _order_unread_map(db, order_ids: list[int], user_id: int) -> dict[int, int]:  # noqa: ANN001
+    """Har bir proyekt uchun o'qilmagan chat xabarlari soni."""
+    if not order_ids:
+        return {}
+    res = await db.execute(select(Chat.order_id, Chat.id).where(Chat.order_id.in_(order_ids)))
+    order_to_chat = {row[0]: row[1] for row in res.all()}
+    if not order_to_chat:
+        return {}
+
+    chat_ids = list(order_to_chat.values())
+    res = await db.execute(
+        select(ChatMember.chat_id, ChatMember.last_read_message_id).where(
+            ChatMember.chat_id.in_(chat_ids),
+            ChatMember.user_id == user_id,
+        )
+    )
+    last_read = dict(res.all())
+
+    out: dict[int, int] = {}
+    for order_id, chat_id in order_to_chat.items():
+        lr = last_read.get(chat_id)
+        q = select(func.count(Message.id)).where(
+            Message.chat_id == chat_id, Message.deleted_at.is_(None)
+        )
+        if lr:
+            q = q.where(Message.id > lr)
+        n = (await db.execute(q)).scalar() or 0
+        if n:
+            out[order_id] = n
+    return out
 
 
 async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noqa: ANN001
@@ -102,7 +140,23 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
     cf = await get_values_bulk(db, "order", ids)
 
     res = await db.execute(
-        select(FileAsset.entity_id, func.count(FileAsset.id))
+        select(
+            FileAsset.entity_id,
+            func.count(FileAsset.id),
+            func.sum(
+                case(
+                    (
+                        or_(
+                            FileAsset.name.ilike("%.stl"),
+                            FileAsset.name.ilike("%.obj"),
+                            FileAsset.name.ilike("%.ply"),
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+        )
         .where(
             FileAsset.entity == FileEntity.ORDER,
             FileAsset.entity_id.in_(ids),
@@ -110,15 +164,28 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         )
         .group_by(FileAsset.entity_id)
     )
-    files_count = dict(res.all())
+    files_count: dict[int, int] = {}
+    has_3d_map: dict[int, bool] = {}
+    for entity_id, count, has_3d in res.all():
+        files_count[entity_id] = count
+        has_3d_map[entity_id] = bool(has_3d)
+    unread_map = await _order_unread_map(db, ids, user.id)
 
     out = []
     for o in orders:
         card = OrderCard.model_validate(o)
         card.custom_fields = cf.get(o.id, {})
         card.files_count = files_count.get(o.id, 0)
+        card.has_3d_files = has_3d_map.get(o.id, False)
+        card.unread_messages = unread_map.get(o.id, 0)
         out.append(_decorate(card, o, user))
     return out
+
+
+@router.get("/tooth-labels", response_model=dict[str, str])
+async def tooth_labels(db: DbDep, _: CurrentUser):
+    """Tish chizmasida ko'rsatiladigan yorliqlar (FDI kod -> ko'rinadigan raqam). Har qanday login qilgan foydalanuvchi ko'ra oladi."""
+    return await get_setting(db, "tooth_labels", DEFAULT_SETTINGS["tooth_labels"][0]["v"])
 
 
 # --------------------------------------------------------------------------
@@ -143,7 +210,7 @@ async def kanban(
     """Kanban doskasi: ustunlar = bosqichlar, kartalar = proyektlar."""
     stages = await svc.active_stages(db)
 
-    base = select(Order)
+    base = select(Order).where(Order.deleted_at.is_(None))
     base = _visibility_filter(base, user)
     if q:
         like = f"%{q}%"
@@ -206,20 +273,26 @@ async def list_orders(
     db: DbDep,
     user: CurrentUser,
     q: str | None = None,
-    stage_id: int | None = None,
+    stage_id: list[int] | None = Query(None),
     responsible_id: int | None = None,
+    patient_id: int | None = None,
+    doctor_id: int | None = None,
     is_closed: bool | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
-    query = _visibility_filter(select(Order), user)
+    query = _visibility_filter(select(Order).where(Order.deleted_at.is_(None)), user)
     if q:
         like = f"%{q}%"
         query = query.where(or_(Order.title.ilike(like), Order.number.ilike(like)))
     if stage_id:
-        query = query.where(Order.stage_id == stage_id)
+        query = query.where(Order.stage_id.in_(stage_id))
     if responsible_id:
         query = query.where(Order.responsible_id == responsible_id)
+    if patient_id:
+        query = query.where(Order.patient_id == patient_id)
+    if doctor_id:
+        query = query.where(Order.doctor_id == doctor_id)
     if is_closed is not None:
         query = query.where(Order.is_closed.is_(is_closed))
 
@@ -243,6 +316,9 @@ async def get_order(order_id: int, db: DbDep, user: CurrentUser):
 
     res = await db.execute(select(Chat.id).where(Chat.order_id == order.id))
     detail.chat_id = res.scalar_one_or_none()
+    if detail.chat_id:
+        unread = await _order_unread_map(db, [order.id], user.id)
+        detail.unread_messages = unread.get(order.id, 0)
 
     res = await db.execute(
         select(FileAsset)
@@ -308,9 +384,11 @@ async def create_order(
         priority=body.priority,
         description=body.description,
         color=body.color,
+        photo_file_id=body.photo_file_id,
+        teeth=body.teeth,
     )
     order.stage = stage
-    svc.apply_stage_deadline(order, stage)
+    await svc.apply_stage_deadline(db, order, stage)
 
     if body.service_ids:
         res = await db.execute(select(Service).where(Service.id.in_(body.service_ids)))
@@ -430,16 +508,16 @@ async def delete_order(
 ):
     res = await db.execute(select(Order).where(Order.id == order_id))
     order = res.scalar_one_or_none()
-    if order is None:
+    if order is None or order.deleted_at is not None:
         raise HTTPException(404, "order_not_found")
 
     number, title = order.number, order.title
-    await db.delete(order)
+    order.deleted_at = now_utc()
     await log_activity(
         db, action="order.deleted", category=LogCategory.ORDER, actor=actor,
         entity="order", entity_id=order_id,
-        message_ru=f"Удалён проект {number} «{title}»",
-        message_uz=f"Proyekt o'chirildi: {number} «{title}»",
+        message_ru=f"Проект {number} «{title}» помещён в корзину",
+        message_uz=f"Proyekt {number} «{title}» savatga tashlandi",
         request=request,
     )
     await db.commit()
@@ -447,6 +525,50 @@ async def delete_order(
 
     await hub.publish("kanban", "order.deleted", {"id": order_id})
     return Msg(detail="deleted")
+
+
+@router.post("/{order_id}/restore", response_model=Msg)
+async def restore_order(
+    order_id: int,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("order.delete"))],
+):
+    res = await db.execute(select(Order).where(Order.id == order_id))
+    order = res.scalar_one_or_none()
+    if order is None or order.deleted_at is None:
+        raise HTTPException(404, "order_not_found")
+
+    number, title = order.number, order.title
+    order.deleted_at = None
+    await log_activity(
+        db, action="order.restored", category=LogCategory.ORDER, actor=actor,
+        entity="order", entity_id=order_id,
+        message_ru=f"Проект {number} «{title}» восстановлен из корзины",
+        message_uz=f"Proyekt {number} «{title}» savatdan tiklandi",
+        request=request,
+    )
+    await db.commit()
+    from app.realtime.hub import hub
+
+    await hub.publish("kanban", "order.created", {"id": order_id})
+    return Msg(detail="restored")
+
+
+@router.get("/trash/list", response_model=list[OrderCard])
+async def trash_orders(
+    db: DbDep,
+    user: CurrentUser,
+):
+    """Korzinkadagi o'chirilgan proyektlar (30 kungacha)."""
+    query = select(Order).where(
+        Order.deleted_at.is_not(None),
+        Order.deleted_at > now_utc() - timedelta(days=30),
+    )
+    query = _visibility_filter(query, user)
+    query = query.order_by(Order.deleted_at.desc())
+    res = await db.execute(query)
+    return await _cards(db, list(res.scalars().all()), user)
 
 
 # --------------------------------------------------------------------------

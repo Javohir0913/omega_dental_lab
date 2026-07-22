@@ -21,6 +21,7 @@ from app.models import (
     user_stages,
 )
 from app.realtime.hub import hub
+from app.services import telegram
 
 # Shablon yo'q bo'lsa ishlatiladigan zaxira matnlar: event -> (title_ru, title_uz, body_ru, body_uz)
 DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
@@ -66,6 +67,11 @@ DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
         "Дедлайн этапа {stage} истёк — «{order_title}»",
         "{stage} bosqichining dedlayni o'tdi — «{order_title}»",
     ),
+    NotifyEvent.ORDER_DEADLINE_OVERDUE: (
+        "{order_number}: общий дедлайн истёк", "{order_number}: umumiy dedlayn o'tdi",
+        "Проект «{order_title}» не завершён к дедлайну ({deadline}), этап: {stage}",
+        "«{order_title}» proyekti dedlaynga ({deadline}) qadar yakunlanmadi, bosqich: {stage}",
+    ),
     NotifyEvent.ORDER_FILE: (
         "{order_number}: новый файл", "{order_number}: yangi fayl",
         "{actor} загрузил файл в проект «{order_title}»",
@@ -87,6 +93,7 @@ DEFAULT_RECIPIENTS: dict[str, list[str]] = {
     NotifyEvent.ORDER_SUCCESS: [Recipient.ORDER_PARTICIPANTS, Recipient.CREATED_BY, "role:hr"],
     NotifyEvent.ORDER_FAIL: [Recipient.ORDER_PARTICIPANTS, Recipient.CREATED_BY, "role:hr"],
     NotifyEvent.ORDER_OVERDUE: [Recipient.RESPONSIBLE, "role:hr"],
+    NotifyEvent.ORDER_DEADLINE_OVERDUE: ["role:admin", "role:super_admin"],
     NotifyEvent.ORDER_FILE: [Recipient.RESPONSIBLE],
     NotifyEvent.CHAT_MESSAGE: [],  # chat a'zolari alohida hisoblanadi
 }
@@ -198,12 +205,14 @@ async def notify(
     if tpl is not None:
         tokens = list(tpl.recipients or [])
         notify_actor = tpl.notify_actor
+        send_telegram = tpl.send_telegram
         texts = (tpl.title_ru, tpl.title_uz, tpl.body_ru, tpl.body_uz)
         if not any(texts):
             texts = DEFAULT_TEXTS.get(event, ("{order_number}", "{order_number}", "", ""))
     else:
         tokens = DEFAULT_RECIPIENTS.get(event, [])
         notify_actor = False
+        send_telegram = False
         texts = DEFAULT_TEXTS.get(event, ("{order_number}", "{order_number}", "", ""))
 
     title_ru, title_uz, body_ru, body_uz = texts
@@ -256,6 +265,10 @@ async def notify(
                 "created_at": n.created_at.isoformat(),
             },
         )
+        if send_telegram:
+            tg_text = n.title if not n.body else f"{n.title}\n\n{n.body}"
+            await telegram.notify_user_telegram(db, n.user_id, tg_text)
+
     return created
 
 

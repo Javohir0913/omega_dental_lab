@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
-import { Confirm, Empty, Field, Modal, Spinner } from '@/components/ui'
+import { Badge, Empty, Field, Modal, Spinner } from '@/components/ui'
 import { CustomFieldInput } from '@/components/FieldInput'
 import { toast } from '@/components/Toast'
 import { dateOnly } from '@/lib/format'
@@ -14,30 +16,38 @@ export default function PatientsPage() {
   const lang = useLang((s) => s.lang)
   const { can } = useAuth()
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [edit, setEdit] = useState<Patient | null>(null)
   const [creating, setCreating] = useState(false)
-  const [del, setDel] = useState<Patient | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [archiving, setArchiving] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['patients', q, page],
+    queryKey: ['patients', q, page, showArchived],
     queryFn: async () =>
-      (await api.get<Page<Patient>>('/patients', { params: { q: q || undefined, page, size: 30 } }))
-        .data,
+      (await api.get<Page<Patient>>('/patients', {
+        params: { q: q || undefined, is_active: showArchived ? false : undefined, page, size: 30 },
+      })).data,
   })
 
-  async function remove() {
-    if (!del) return
+  async function toggleActive(p: Patient) {
+    setArchiving(true)
     try {
-      const { data } = await api.delete(`/patients/${del.id}`)
-      toast(data.detail === 'archived' ? (lang === 'ru' ? 'Архивирован' : 'Arxivlandi') : t('saved'))
+      if (p.is_active) {
+        await api.delete(`/patients/${p.id}`)
+        toast(lang === 'ru' ? 'Архивирован' : 'Arxivlandi')
+      } else {
+        await api.patch(`/patients/${p.id}`, { is_active: true })
+        toast(lang === 'ru' ? 'Восстановлен' : 'Tiklandi')
+      }
       qc.invalidateQueries({ queryKey: ['patients'] })
     } catch (e) {
       toast(errText(e, lang), 'error')
     } finally {
-      setDel(null)
+      setArchiving(false)
     }
   }
 
@@ -56,9 +66,20 @@ export default function PatientsPage() {
             setPage(1)
           }}
         />
+        <button
+          onClick={() => { setShowArchived((v) => !v); setPage(1) }}
+          className={clsx(
+            'rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+            showArchived
+              ? 'border-amber-300 bg-amber-50 font-medium text-amber-700 dark:bg-amber-900/25'
+              : 'border-surface-border text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]',
+          )}
+        >
+          🗂 {lang === 'ru' ? 'Архив' : 'Arxiv'}
+        </button>
         <div className="flex-1" />
         <span className="text-xs text-ink-faint">{data?.total ?? 0}</span>
-        {can('patient.manage') && (
+        {!showArchived && can('patient.manage') && (
           <button className="btn-primary" onClick={() => setCreating(true)}>
             + {t('add')}
           </button>
@@ -85,29 +106,48 @@ export default function PatientsPage() {
               {items.map((p) => (
                 <tr
                   key={p.id}
-                  className="border-b border-surface-border last:border-0 hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#222836]"
+                  onClick={() => navigate(`/patients/${p.id}`)}
+                  className="cursor-pointer border-b border-surface-border last:border-0 hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#222836]"
                 >
-                  <td className="px-3 py-2 font-medium">{p.full_name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <span className={clsx(!p.is_active && 'text-ink-faint')}>{p.full_name}</span>
+                      {!p.is_active && <Badge color="#d97706">{lang === 'ru' ? 'Архив' : 'Arxiv'}</Badge>}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-ink-soft">{p.phone ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-soft">{p.doctor?.full_name ?? '—'}</td>
                   <td className="px-3 py-2 text-ink-soft">
                     {p.birth_date ? dateOnly(p.birth_date) : '—'}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                     {can('patient.manage') && (
                       <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => setEdit(p)}
-                          className="rounded p-1 text-ink-faint hover:text-brand-600"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          onClick={() => setDel(p)}
-                          className="rounded p-1 text-ink-faint hover:text-rose-600"
-                        >
-                          ✕
-                        </button>
+                        {p.is_active ? (
+                          <button
+                            onClick={() => setEdit(p)}
+                            className="rounded p-1 text-ink-faint hover:text-brand-600"
+                          >
+                            ✎
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => toggleActive(p)}
+                            disabled={archiving}
+                            className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600"
+                          >
+                            {t('restore')}
+                          </button>
+                        )}
+                        {p.is_active && (
+                          <button
+                            onClick={() => toggleActive(p)}
+                            disabled={archiving}
+                            className="rounded p-1 text-ink-faint hover:text-rose-600"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -142,25 +182,18 @@ export default function PatientsPage() {
           onDone={() => qc.invalidateQueries({ queryKey: ['patients'] })}
         />
       )}
-
-      <Confirm
-        open={Boolean(del)}
-        text={del?.full_name ?? ''}
-        onCancel={() => setDel(null)}
-        onOk={remove}
-      />
     </div>
   )
 }
 
-function PatientForm({
+export function PatientForm({
   patient,
   onClose,
   onDone,
 }: {
   patient?: Patient
   onClose: () => void
-  onDone: () => void
+  onDone: (patient: Patient) => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
@@ -196,10 +229,11 @@ function PatientForm({
       custom_fields: cf,
     }
     try {
-      if (patient) await api.patch(`/patients/${patient.id}`, body)
-      else await api.post('/patients', body)
+      const { data } = patient
+        ? await api.patch<Patient>(`/patients/${patient.id}`, body)
+        : await api.post<Patient>('/patients', body)
       toast(t('saved'))
-      onDone()
+      onDone(data)
       onClose()
     } catch (e) {
       toast(errText(e, lang), 'error')
@@ -212,6 +246,7 @@ function PatientForm({
     <Modal
       open
       onClose={onClose}
+      wide
       title={patient ? t('edit') : t('add')}
       footer={
         <>

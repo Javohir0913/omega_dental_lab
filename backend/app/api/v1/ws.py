@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.security import ACCESS, decode_token
 from app.db.session import AsyncSessionLocal
-from app.models import ChatMember, User, UserSession
+from app.models import Chat, ChatMember, ChatType, Order, User, UserSession
 from app.realtime.hub import hub
 
 log = logging.getLogger(__name__)
@@ -49,12 +49,40 @@ async def _can_join(user: User, topic: str) -> bool:
         if user.is_super:
             return True
         async with AsyncSessionLocal() as db:
+            # Agar foydalanuvchi allaqachon a'zo bo'lsa — ruxsat
             res = await db.execute(
                 select(ChatMember).where(
                     ChatMember.chat_id == chat_id, ChatMember.user_id == user.id
                 )
             )
-            return res.scalar_one_or_none() is not None
+            if res.scalar_one_or_none() is not None:
+                return True
+
+            # REST API _membership() hali COMMIT qilmagan bo'lishi mumkin,
+            # shuning uchun ChatMember recordini ko'rmasak ham kirish huquqini tekshiramiz
+            res = await db.execute(select(Chat).where(Chat.id == chat_id))
+            chat = res.scalar_one_or_none()
+            if chat is None:
+                return False
+
+            # Order chatlari: proyektga kirish huquqi bor foydalanuvchilarga ruxsat
+            if chat.order_id:
+                res = await db.execute(select(Order).where(Order.id == chat.order_id))
+                order = res.scalar_one_or_none()
+                if order:
+                    has_access = (
+                        user.has_perm("order.view.all")
+                        or order.responsible_id == user.id
+                        or order.created_by_id == user.id
+                    )
+                    return has_access
+
+            # Direct chatlari: ishtirokchiga ruxsat
+            if chat.type == ChatType.DIRECT and chat.direct_key:
+                parts = chat.direct_key.split(":")
+                return len(parts) == 2 and str(user.id) in parts
+
+            return False
 
     if topic.startswith("order:"):
         # kartani ochish huquqi REST tomonda tekshiriladi; bu yerda faqat

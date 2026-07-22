@@ -119,6 +119,17 @@ export interface Patient {
   custom_fields: Record<string, unknown>
 }
 
+export interface FileOut {
+  id: number
+  name: string
+  mime: string | null
+  size: number
+  is_image: boolean
+  url: string
+  uploaded_by: UserShort | null
+  created_at: string
+}
+
 export interface FileAsset {
   id: number
   name: string
@@ -148,11 +159,15 @@ export interface OrderCard {
   responsible: UserShort | null
   services: ServiceItem[]
   custom_fields: Record<string, unknown>
+  photo: FileOut | null
+  teeth: number[] | null
   is_overdue: boolean
   can_move: boolean
   can_claim: boolean
   files_count: number
+  has_3d_files: boolean
   unread_messages: number
+  deleted_at: string | null
 }
 
 export interface OrderDetail extends OrderCard {
@@ -229,10 +244,29 @@ export interface NotifyTemplate {
   is_active: boolean
   recipients: string[]
   notify_actor: boolean
+  send_telegram: boolean
   title_ru: string
   title_uz: string
   body_ru: string
   body_uz: string
+}
+
+export interface Holiday {
+  id: number
+  month: number
+  day: number
+  year: number | null
+  name_ru: string
+  name_uz: string
+}
+
+export interface TelegramContact {
+  id: number
+  chat_id: number
+  tg_username: string | null
+  tg_first_name: string | null
+  started_at: string
+  user: UserShort | null
 }
 
 export interface NotifyMeta {
@@ -257,10 +291,12 @@ export interface ChatItem {
   type: 'order' | 'direct' | 'group'
   title: string | null
   order_id: number | null
+  order_is_closed: boolean
   order_number: string | null
   last_message_at: string | null
   last_message: string | null
   unread: number
+  hidden: boolean
   members: UserShort[]
   peer: UserShort | null
 }
@@ -268,6 +304,7 @@ export interface ChatItem {
 export interface ChatMessage {
   id: number
   chat_id: number
+  order_id?: number | null
   text: string | null
   is_system: boolean
   reply_to_id: number | null
@@ -306,6 +343,20 @@ export interface Page<T> {
   total: number
   page: number
   size: number
+}
+
+/** Order tahrirlash payload (PATCH /orders/:id ga yuboriladi) */
+export interface OrderUpdatePayload {
+  title?: string
+  photo_file_id?: number | null
+  patient_id?: number | null
+  doctor_id?: number | null
+  service_ids?: number[]
+  deadline?: string | null
+  priority?: number | null
+  description?: string | null
+  teeth?: number[]
+  custom_fields?: Record<string, unknown>
 }
 
 /** Majburiy maydon xatosi (422) */

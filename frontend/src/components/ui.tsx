@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { useT } from '@/i18n'
 
@@ -33,7 +33,7 @@ export function Modal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-[6vh]">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 sm:items-start sm:p-4 sm:pt-[6vh]">
       <div
         className="absolute inset-0"
         onClick={onClose}
@@ -41,7 +41,7 @@ export function Modal({
       />
       <div
         className={clsx(
-          'card relative w-full shadow-pop',
+          'card relative w-full max-h-[92dvh] rounded-b-none shadow-pop sm:max-h-none sm:rounded-xl',
           wide ? 'max-w-4xl' : 'max-w-lg',
         )}
       >
@@ -51,9 +51,9 @@ export function Modal({
             ✕
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-4 py-4">{children}</div>
+        <div className="max-h-[72dvh] overflow-y-auto px-4 py-4 sm:max-h-[70vh]">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-surface-border px-4 py-3 dark:border-[#2a3140]">
+          <div className="flex flex-col-reverse gap-2 border-t border-surface-border px-4 py-3 dark:border-[#2a3140] sm:flex-row sm:justify-end">
             {footer}
           </div>
         )}
@@ -121,6 +121,72 @@ export function Field({
       {children}
       {hint && !error && <div className="mt-1 text-[11px] text-ink-faint">{hint}</div>}
       {error && <div className="mt-1 text-[11px] text-rose-600">{error}</div>}
+    </div>
+  )
+}
+
+/* ---------------- SearchSelect ---------------- */
+
+export function SearchSelect<T extends { id: number; label: string; sub?: string }>({
+  items,
+  value,
+  onChange,
+  search,
+  onSearchChange,
+  placeholder,
+  clearLabel,
+}: {
+  items: T[]
+  value: number | null
+  onChange: (id: number | null) => void
+  search: string
+  onSearchChange: (v: string) => void
+  placeholder: string
+  clearLabel?: string
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const selected = items.find((i) => i.id === value)
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        className="input w-full"
+        value={open ? search : (selected?.label ?? '')}
+        placeholder={placeholder}
+        onFocus={() => { setOpen(true); onSearchChange('') }}
+        onChange={(e) => onSearchChange(e.target.value)}
+      />
+      {open && (
+        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+          <button
+            type="button"
+            className="w-full px-3 py-1.5 text-left text-xs text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836]"
+            onClick={() => { onChange(null); setOpen(false) }}
+          >
+            — {clearLabel ?? t('free')}
+          </button>
+          {items.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={`w-full px-3 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836] ${value === item.id ? 'bg-brand-50 font-medium dark:bg-brand-900/20' : ''}`}
+              onClick={() => { onChange(item.id); setOpen(false); onSearchChange('') }}
+            >
+              <div>{item.label}</div>
+              {item.sub && <div className="text-[10px] text-ink-faint">{item.sub}</div>}
+            </button>
+          ))}
+          {items.length === 0 && <div className="px-3 py-2 text-xs text-ink-faint">{t('empty')}</div>}
+        </div>
+      )}
     </div>
   )
 }
@@ -206,7 +272,7 @@ export function Tabs({
   items: { value: string; label: string; badge?: number }[]
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-surface-border dark:border-[#2a3140]">
+    <div className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-surface-border dark:border-[#2a3140]">
       {items.map((i) => (
         <button
           key={i.value}

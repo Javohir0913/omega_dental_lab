@@ -30,6 +30,7 @@ class Chat(Base, TimestampMixin):
     members: Mapped[list["ChatMember"]] = relationship(
         back_populates="chat", cascade="all, delete-orphan", lazy="selectin"
     )
+    order: Mapped["Order | None"] = relationship(lazy="selectin")  # noqa: F821
 
 
 class ChatMember(Base):
@@ -42,6 +43,7 @@ class ChatMember(Base):
     last_read_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     muted: Mapped[bool] = mapped_column(Boolean, default=False)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)
 
     chat: Mapped[Chat] = relationship(back_populates="members")
     user: Mapped["User"] = relationship(lazy="selectin")  # noqa: F821

@@ -1,11 +1,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, insert, or_, select
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import hash_password
-from app.models import LogCategory, Role, Service, Stage, User, UserSession
+from app.models import LogCategory, Role, Stage, User, UserSession
+from app.models.user import user_services, user_stages
 from app.schemas.common import Msg, Page
 from app.schemas.user import (
     PasswordSet,
@@ -82,18 +84,47 @@ def _guard_super(actor: User, target: User) -> None:
 
 
 async def _apply_links(db, user: User, stage_ids, service_ids) -> None:  # noqa: ANN001
+    """N:M bog'lanishlarni async-safe usulda yangilaydi.
+
+    `user.stages = [...]` async kontekstda lazy load chaqirib MissingGreenlet beradi —
+    shuning uchun association jadvaliga to'g'ridan-to'g'ri yozamiz.
+    """
     if stage_ids is not None:
-        res = await db.execute(select(Stage).where(Stage.id.in_(stage_ids or [])))
-        user.stages = list(res.scalars().all())
+        await db.execute(delete(user_stages).where(user_stages.c.user_id == user.id))
+        if stage_ids:
+            await db.execute(
+                insert(user_stages),
+                [{"user_id": user.id, "stage_id": sid} for sid in stage_ids],
+            )
     if service_ids is not None:
-        res = await db.execute(select(Service).where(Service.id.in_(service_ids or [])))
-        user.services = list(res.scalars().all())
+        await db.execute(delete(user_services).where(user_services.c.user_id == user.id))
+        if service_ids:
+            await db.execute(
+                insert(user_services),
+                [{"user_id": user.id, "service_id": sid} for sid in service_ids],
+            )
+
+
+async def _load_user(db, user_id: int) -> User:
+    res = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            selectinload(User.role),
+            selectinload(User.stages),
+            selectinload(User.services),
+        )
+    )
+    user = res.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(404, "user_not_found")
+    return user
 
 
 @router.get("", response_model=Page[UserOut])
 async def list_users(
     db: DbDep,
-    _: Annotated[User, Depends(require("user.view"))],
+    _: Annotated[User, Depends(require("user.view", "chat.direct", "chat.order", any_of=True))],
     q: str | None = None,
     role_id: int | None = None,
     stage_id: int | None = None,
@@ -180,8 +211,7 @@ async def create_user(
         request=request,
     )
     await db.commit()
-    await db.refresh(user)
-    return UserOut.model_validate(user)
+    return UserOut.model_validate(await _load_user(db, user.id))
 
 
 @router.patch("/{user_id}", response_model=UserOut)
@@ -238,8 +268,7 @@ async def update_user(
         request=request,
     )
     await db.commit()
-    await db.refresh(user)
-    return UserOut.model_validate(user)
+    return UserOut.model_validate(await _load_user(db, user.id))
 
 
 @router.post("/{user_id}/password", response_model=Msg)

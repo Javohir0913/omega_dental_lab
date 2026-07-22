@@ -95,9 +95,9 @@ export default function AdminRoles() {
   if (isLoading) return <Spinner />
 
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-col gap-4 md:flex-row">
       {/* Rollar ro'yxati */}
-      <div className="w-52 shrink-0 space-y-1">
+      <div className="grid shrink-0 grid-cols-2 gap-1 sm:grid-cols-3 md:block md:w-52 md:space-y-1">
         {roles.map((r) => (
           <button
             key={r.id}
@@ -117,7 +117,7 @@ export default function AdminRoles() {
           </button>
         ))}
 
-        <button className="btn-ghost mt-2 w-full text-xs" onClick={() => setCreating(true)}>
+        <button className="btn-ghost col-span-full mt-1 w-full text-xs md:mt-2" onClick={() => setCreating(true)}>
           + {t('add')}
         </button>
       </div>

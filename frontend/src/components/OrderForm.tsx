@@ -1,9 +1,14 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, errText } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
-import { Field, Modal } from '@/components/ui'
-import { CustomFieldInput } from '@/components/FieldInput'
+import { Field, Modal, SearchSelect } from '@/components/ui'
+import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
+import ToothChart from '@/components/ToothChart'
+import { useToothLabels } from '@/lib/useToothLabels'
+import { PatientForm } from '@/pages/Patients'
+import { DoctorForm } from '@/pages/Doctors'
 import type {
   CustomField,
   Doctor,
@@ -25,11 +30,20 @@ export default function OrderForm({
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
+  const { can } = useAuth()
+  const qc = useQueryClient()
   const edit = Boolean(order)
+  const toothLabels = useToothLabels()
 
   const [title, setTitle] = useState(order?.title ?? '')
+  const [teeth, setTeeth] = useState<number[]>(order?.teeth ?? [])
+  const [photoFileId, setPhotoFileId] = useState<number | null>(order?.photo?.id ?? null)
   const [patientId, setPatientId] = useState<number | null>(order?.patient?.id ?? null)
   const [doctorId, setDoctorId] = useState<number | null>(order?.doctor?.id ?? null)
+  const [creatingPatient, setCreatingPatient] = useState(false)
+  const [creatingDoctor, setCreatingDoctor] = useState(false)
+  const [pSearch, setPSearch] = useState('')
+  const [dSearch, setDSearch] = useState('')
   const [serviceIds, setServiceIds] = useState<number[]>(order?.services.map((s) => s.id) ?? [])
   const [deadline, setDeadline] = useState(order?.deadline?.slice(0, 16) ?? '')
   const [priority, setPriority] = useState(order?.priority ?? 500)
@@ -63,12 +77,14 @@ export default function OrderForm({
     setMissing(new Set())
     const body = {
       title: title.trim(),
+      photo_file_id: photoFileId,
       patient_id: patientId,
       doctor_id: doctorId,
       service_ids: serviceIds,
       deadline: deadline || null,
       priority,
       description: description.trim() || null,
+      teeth,
       custom_fields: cf,
     }
     try {
@@ -94,7 +110,17 @@ export default function OrderForm({
   const activeFields = (fields ?? []).filter((f) => f.is_active)
   const err = (ref: string) => (missing.has(ref) ? t('required') : null)
 
+  const patList = (patients?.items ?? []).filter((p) => {
+    const q = pSearch.toLowerCase()
+    return !q || p.full_name.toLowerCase().includes(q) || (p.phone ?? '').includes(q)
+  })
+  const docList = (doctors?.items ?? []).filter((d) => {
+    const q = dSearch.toLowerCase()
+    return !q || d.full_name.toLowerCase().includes(q) || (d.clinic ?? '').toLowerCase().includes(q)
+  })
+
   return (
+    <>
     <Modal
       open
       onClose={onClose}
@@ -118,63 +144,85 @@ export default function OrderForm({
           </Field>
         </div>
 
+        <div className="sm:col-span-2">
+          <Field label={lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}>
+            <FileFieldInput
+              value={photoFileId}
+              onChange={(v) => setPhotoFileId(Array.isArray(v) ? (v[0] as number) ?? null : (v as number | null))}
+              orderId={order?.id}
+              lang={lang}
+              multiple={false}
+            />
+          </Field>
+        </div>
+
         <Field label={t('patient')} error={err('sys:patient_id')}>
-          <select
-            className="input"
-            value={patientId ?? ''}
-            onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">—</option>
-            {(patients?.items ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-                {p.phone ? ` · ${p.phone}` : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <SearchSelect
+                items={patList.map((p) => ({ id: p.id, label: p.full_name, sub: p.phone ? `📞 ${p.phone}` : undefined }))}
+                value={patientId}
+                onChange={setPatientId}
+                search={pSearch}
+                onSearchChange={setPSearch}
+                placeholder={t('search')}
+                clearLabel={t('none')}
+              />
+            </div>
+            {can('patient.manage') && (
+              <button
+                type="button"
+                className="btn-ghost shrink-0 px-2.5"
+                title={t('add')}
+                onClick={() => setCreatingPatient(true)}
+              >
+                +
+              </button>
+            )}
+          </div>
         </Field>
 
         <Field label={t('doctor')} error={err('sys:doctor_id')}>
-          <select
-            className="input"
-            value={doctorId ?? ''}
-            onChange={(e) => setDoctorId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">—</option>
-            {(doctors?.items ?? []).map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.full_name}
-                {d.clinic ? ` · ${d.clinic}` : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <SearchSelect
+                items={docList.map((d) => ({ id: d.id, label: d.full_name, sub: d.clinic ? `🏥 ${d.clinic}` : undefined }))}
+                value={doctorId}
+                onChange={setDoctorId}
+                search={dSearch}
+                onSearchChange={setDSearch}
+                placeholder={t('search')}
+                clearLabel={t('none')}
+              />
+            </div>
+            {can('doctor.manage') && (
+              <button
+                type="button"
+                className="btn-ghost shrink-0 px-2.5"
+                title={t('add')}
+                onClick={() => setCreatingDoctor(true)}
+              >
+                +
+              </button>
+            )}
+          </div>
         </Field>
 
         <div className="sm:col-span-2">
           <Field label={t('services')} error={err('sys:services')}>
-            <div className="flex flex-wrap gap-1.5">
-              {(services ?? []).map((s) => {
-                const on = serviceIds.includes(s.id)
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() =>
-                      setServiceIds((prev) =>
-                        on ? prev.filter((x) => x !== s.id) : [...prev, s.id],
-                      )
-                    }
-                    className={
-                      on
-                        ? 'chip border border-brand-300 bg-brand-100 text-brand-700'
-                        : 'chip border border-surface-border bg-white text-ink-soft dark:border-[#2f3745] dark:bg-[#151a23]'
-                    }
-                  >
-                    {lang === 'ru' ? s.name_ru : s.name_uz}
-                  </button>
-                )
-              })}
-            </div>
+            <ServiceMultiSelect
+              services={services ?? []}
+              selectedIds={serviceIds}
+              onChange={setServiceIds}
+              lang={lang}
+              t={t}
+            />
+          </Field>
+        </div>
+
+        <div className="sm:col-span-2">
+          <Field label={t('teeth')}>
+            <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
           </Field>
         </div>
 
@@ -221,6 +269,7 @@ export default function OrderForm({
                 field={f}
                 value={cf[f.code]}
                 onChange={(v) => setCf((p) => ({ ...p, [f.code]: v }))}
+                orderId={order?.id}
               />
             </Field>
           </div>
@@ -233,5 +282,205 @@ export default function OrderForm({
         </div>
       )}
     </Modal>
+
+    {creatingPatient && (
+      <PatientForm
+        onClose={() => setCreatingPatient(false)}
+        onDone={(p) => {
+          setPatientId(p.id)
+          qc.invalidateQueries({ queryKey: ['patients-select'] })
+        }}
+      />
+    )}
+
+    {creatingDoctor && (
+      <DoctorForm
+        onClose={() => setCreatingDoctor(false)}
+        onDone={(d) => {
+          setDoctorId(d.id)
+          qc.invalidateQueries({ queryKey: ['doctors-select'] })
+        }}
+      />
+    )}
+    </>
+  )
+}
+
+function ServiceMultiSelect({
+  services,
+  selectedIds,
+  onChange,
+  lang,
+  t,
+}: {
+  services: ServiceItem[]
+  selectedIds: number[]
+  onChange: (ids: number[]) => void
+  lang: string
+  t: (k: string) => string
+}) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const selectedServices = services.filter((s) => selectedIds.includes(s.id))
+  const filteredServices = services.filter((s) => {
+    const name = lang === 'ru' ? s.name_ru : s.name_uz
+    return name.toLowerCase().includes(search.toLowerCase()) || (s.code && s.code.toLowerCase().includes(search.toLowerCase()))
+  })
+
+  function toggle(id: number) {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id))
+    } else {
+      onChange([...selectedIds, id])
+    }
+  }
+
+  function clearAll() {
+    onChange([])
+  }
+
+  function selectAllFiltered() {
+    const filteredIds = filteredServices.map((s) => s.id)
+    const newIds = Array.from(new Set([...selectedIds, ...filteredIds]))
+    onChange(newIds)
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Selected tags bar */}
+      {selectedServices.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/50 p-2 dark:border-brand-900/30 dark:bg-brand-900/10">
+          <div className="mr-1 flex items-center gap-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+            <span>✓ {t('selected') ?? 'Tanlanganlar'}:</span>
+            <span className="rounded-full bg-brand-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
+              {selectedServices.length}
+            </span>
+          </div>
+          {selectedServices.map((s) => {
+            const name = lang === 'ru' ? s.name_ru : s.name_uz
+            return (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-xs font-medium text-ink shadow-sm border border-brand-200 dark:border-[#2f3745] dark:bg-[#1a1f2a] dark:text-[#e6e9ee]"
+              >
+                {name}
+                <button
+                  type="button"
+                  onClick={() => toggle(s.id)}
+                  className="rounded p-0.5 text-ink-faint hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/30"
+                  title="O'chirish"
+                >
+                  ✕
+                </button>
+              </span>
+            )
+          })}
+          <button
+            type="button"
+            onClick={clearAll}
+            className="ml-auto text-xs text-rose-600 hover:underline dark:text-rose-400"
+          >
+            {t('clear_all') ?? 'Barchasini tozalash'}
+          </button>
+        </div>
+      )}
+
+      {/* Input / Dropdown trigger */}
+      <div className="relative">
+        <div className="relative flex items-center">
+          <input
+            type="text"
+            className="input pr-8"
+            placeholder={lang === 'ru' ? 'Поиск и выбор услуг...' : 'Xizmatlarni qidirish va tanlash...'}
+            value={search}
+            onFocus={() => setOpen(true)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setOpen(true)
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="absolute right-2.5 text-xs text-ink-faint hover:text-ink"
+          >
+            {open ? '▲' : '▼'}
+          </button>
+        </div>
+
+        {open && (
+          <>
+            <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+            <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 overflow-y-auto rounded-xl border border-surface-border bg-white p-2 shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+              {/* Quick actions bar */}
+              <div className="mb-2 flex items-center justify-between border-b border-surface-border pb-1.5 px-1 text-xs text-ink-faint dark:border-[#2f3745]">
+                <span>{filteredServices.length} ta xizmat topildi</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAllFiltered}
+                    className="text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    Barchasini tanlash
+                  </button>
+                  {selectedIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAll}
+                      className="text-rose-600 hover:underline dark:text-rose-400"
+                    >
+                      Tozalash
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Service list items */}
+              <div className="space-y-1">
+                {filteredServices.map((s) => {
+                  const on = selectedIds.includes(s.id)
+                  const name = lang === 'ru' ? s.name_ru : s.name_uz
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggle(s.id)}
+                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
+                        on
+                          ? 'bg-brand-50 text-brand-900 font-medium dark:bg-brand-900/30 dark:text-brand-200'
+                          : 'hover:bg-surface-muted text-ink dark:hover:bg-[#222836] dark:text-[#e6e9ee]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 truncate">
+                        <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] ${
+                          on
+                            ? 'border-brand-500 bg-brand-500 text-white font-bold'
+                            : 'border-surface-border dark:border-[#2f3745]'
+                        }`}>
+                          {on ? '✓' : ''}
+                        </span>
+                        <span className="truncate">{name}</span>
+                        {s.code && (
+                          <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-mono text-ink-faint dark:bg-[#151a23]">
+                            {s.code}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+
+                {filteredServices.length === 0 && (
+                  <div className="py-4 text-center text-xs text-ink-faint">
+                    {lang === 'ru' ? 'Услуги не найдены' : 'Xizmatlar topilmadi'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }

@@ -3,16 +3,21 @@ bildirishnoma shablonlari, umumiy sozlamalar."""
 
 from typing import Annotated
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.deps import CurrentUser, DbDep, require
+from app.core.security import now_utc
 from app.models import (
     SYSTEM_ORDER_FIELDS,
+    ActivityLog,
     CustomField,
     CustomFieldValue,
     FieldEntity,
     FieldType,
+    Holiday,
     LogCategory,
     NotifyEvent,
     NotifyTemplate,
@@ -21,6 +26,7 @@ from app.models import (
     Role,
     Stage,
     StageRequirement,
+    TelegramContact,
     User,
 )
 from app.schemas.admin import (
@@ -28,6 +34,8 @@ from app.schemas.admin import (
     CustomFieldOut,
     CustomFieldUpdate,
     FieldRefOut,
+    HolidayCreate,
+    HolidayOut,
     NotifyMetaOut,
     NotifyTemplateOut,
     NotifyTemplateUpsert,
@@ -36,10 +44,15 @@ from app.schemas.admin import (
     StageRequirementCreate,
     StageRequirementOut,
     StageRequirementUpdate,
+    TelegramContactOut,
+    TelegramLinkBody,
+    TelegramTestOut,
 )
 from app.schemas.common import Msg
+from app.services import telegram
 from app.services.logger import log_activity
-from app.services.settings_store import all_settings, set_setting
+from app.services.settings_store import all_settings, get_setting, set_setting
+from app.services.telegram_poller import telegram_poller
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -376,7 +389,8 @@ _EVENT_LABELS: dict[str, tuple[str, str]] = {
     NotifyEvent.ORDER_RENAMED: ("Изменены данные проекта", "Proyekt ma'lumoti o'zgardi"),
     NotifyEvent.ORDER_SUCCESS: ("Проект успешно завершён", "Proyekt muvaffaqiyatli yakunlandi"),
     NotifyEvent.ORDER_FAIL: ("Проект провален", "Proyekt muvaffaqiyatsiz"),
-    NotifyEvent.ORDER_OVERDUE: ("Просрочен дедлайн", "Dedlayn kechikdi"),
+    NotifyEvent.ORDER_OVERDUE: ("Просрочен дедлайн этапа", "Bosqich dedlayni kechikdi"),
+    NotifyEvent.ORDER_DEADLINE_OVERDUE: ("Просрочен общий дедлайн проекта", "Proyektning umumiy dedlayni o'tdi"),
     NotifyEvent.ORDER_FILE: ("Загружен файл", "Fayl yuklandi"),
     NotifyEvent.CHAT_MESSAGE: ("Новое сообщение в чате", "Chatda yangi xabar"),
 }
@@ -489,4 +503,173 @@ async def update_settings(
         request=request,
     )
     await db.commit()
+
+    if "telegram_bot_token" in body.values or "telegram_enabled" in body.values:
+        enabled = await get_setting(db, "telegram_enabled", False)
+        token = await get_setting(db, "telegram_bot_token", "")
+        await telegram_poller.restart(token if enabled and token else None)
+
     return SettingsOut(values=await all_settings(db))
+
+
+# ---------- Bayramlar ----------
+
+
+@router.get("/holidays", response_model=list[HolidayOut])
+async def list_holidays(db: DbDep, _: Annotated[User, Depends(require("admin.settings"))]):
+    res = await db.execute(select(Holiday).order_by(Holiday.month, Holiday.day))
+    return list(res.scalars().all())
+
+
+@router.post("/holidays", response_model=HolidayOut)
+async def create_holiday(
+    body: HolidayCreate,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("admin.settings"))],
+):
+    h = Holiday(**body.model_dump())
+    db.add(h)
+    await log_activity(
+        db, action="admin.holiday_created", category=LogCategory.ADMIN, actor=actor,
+        message_ru=f"Добавлен праздник {body.day:02d}.{body.month:02d}"
+        + (f".{body.year}" if body.year else ""),
+        message_uz=f"Bayram qo'shildi {body.day:02d}.{body.month:02d}"
+        + (f".{body.year}" if body.year else ""),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(h)
+    return h
+
+
+@router.delete("/holidays/{holiday_id}", response_model=Msg)
+async def delete_holiday(
+    holiday_id: int,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("admin.settings"))],
+):
+    h = await db.get(Holiday, holiday_id)
+    if h is None:
+        raise HTTPException(404, "not_found")
+    await db.delete(h)
+    await log_activity(
+        db, action="admin.holiday_deleted", category=LogCategory.ADMIN, actor=actor,
+        message_ru=f"Удалён праздник {h.day:02d}.{h.month:02d}",
+        message_uz=f"Bayram o'chirildi {h.day:02d}.{h.month:02d}",
+        request=request,
+    )
+    await db.commit()
+    return Msg(detail="deleted")
+
+
+# ---------- Telegram ----------
+
+
+@router.get("/telegram/contacts", response_model=list[TelegramContactOut])
+async def list_telegram_contacts(db: DbDep, _: Annotated[User, Depends(require("admin.settings"))]):
+    res = await db.execute(select(TelegramContact).order_by(TelegramContact.started_at.desc()))
+    return list(res.scalars().all())
+
+
+@router.post("/telegram/contacts/{contact_id}/link", response_model=TelegramContactOut)
+async def link_telegram_contact(
+    contact_id: int,
+    body: TelegramLinkBody,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("admin.settings"))],
+):
+    contact = await db.get(TelegramContact, contact_id)
+    if contact is None:
+        raise HTTPException(404, "not_found")
+
+    res = await db.execute(
+        select(TelegramContact).where(TelegramContact.user_id == body.user_id)
+    )
+    existing = res.scalar_one_or_none()
+    if existing is not None and existing.id != contact_id:
+        raise HTTPException(409, "already_linked")
+
+    contact.user_id = body.user_id
+    await log_activity(
+        db, action="admin.telegram_linked", category=LogCategory.ADMIN, actor=actor,
+        message_ru=f"Telegram-аккаунт привязан к пользователю #{body.user_id}",
+        message_uz=f"Telegram akkaunt #{body.user_id} foydalanuvchiga biriktirildi",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(contact)
+    return contact
+
+
+@router.post("/telegram/contacts/{contact_id}/unlink", response_model=TelegramContactOut)
+async def unlink_telegram_contact(
+    contact_id: int,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("admin.settings"))],
+):
+    contact = await db.get(TelegramContact, contact_id)
+    if contact is None:
+        raise HTTPException(404, "not_found")
+    contact.user_id = None
+    await log_activity(
+        db, action="admin.telegram_unlinked", category=LogCategory.ADMIN, actor=actor,
+        message_ru="Telegram-аккаунт отвязан", message_uz="Telegram akkaunt bo'shatildi",
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(contact)
+    return contact
+
+
+@router.delete("/telegram/contacts/{contact_id}", response_model=Msg)
+async def delete_telegram_contact(
+    contact_id: int,
+    db: DbDep,
+    _: Annotated[User, Depends(require("admin.settings"))],
+):
+    contact = await db.get(TelegramContact, contact_id)
+    if contact is None:
+        raise HTTPException(404, "not_found")
+    await db.delete(contact)
+    await db.commit()
+    return Msg(detail="deleted")
+
+
+@router.post("/telegram/test", response_model=TelegramTestOut)
+async def test_telegram(db: DbDep, _: Annotated[User, Depends(require("admin.settings"))]):
+    token = await get_setting(db, "telegram_bot_token", "")
+    if not token:
+        return TelegramTestOut(ok=False, detail="no_token")
+    me = await telegram.get_me(token)
+    if me is None:
+        return TelegramTestOut(ok=False, detail="invalid_token")
+    return TelegramTestOut(ok=True, bot_username=me.get("username"))
+
+
+@router.post("/logs/cleanup", response_model=Msg)
+async def cleanup_logs(
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("admin.settings"))],
+):
+    """Tizim loglarini sozlamadagi saqlash muddatidan eski yozuvlarni o'chiradi (OrderStageHistory ga tegilmaydi)."""
+    settings = await all_settings(db)
+    days = int(settings.get("log_retention_days", 90))
+    cutoff = now_utc() - timedelta(days=days)
+
+    res = await db.execute(select(func.count()).where(ActivityLog.created_at < cutoff))
+    total = res.scalar() or 0
+
+    await db.execute(ActivityLog.__table__.delete().where(ActivityLog.created_at < cutoff))
+    await log_activity(
+        db, action="admin.logs_cleanup", category=LogCategory.ADMIN, actor=actor,
+        message_ru=f"Удалено {total} записей логов старше {days} дней",
+        message_uz=f"{days} kundan eski {total} ta log yozuvi o'chirildi",
+        request=request,
+    )
+    await db.commit()
+    return Msg(detail=f"deleted {total}")

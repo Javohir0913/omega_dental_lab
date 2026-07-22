@@ -52,6 +52,7 @@ export const dict: Dict = {
   patient: { ru: 'Пациент', uz: 'Patsent' },
   doctor: { ru: 'Врач', uz: 'Vrach' },
   services: { ru: 'Услуги', uz: 'Xizmatlar' },
+  teeth: { ru: 'Зубы', uz: 'Tishlar' },
   stage: { ru: 'Этап', uz: 'Bosqich' },
   responsible: { ru: 'Ответственный', uz: "Mas'ul" },
   deadline: { ru: 'Дедлайн', uz: 'Dedlayn' },
@@ -108,6 +109,127 @@ export const dict: Dict = {
   admin_roles: { ru: 'Роли и права', uz: 'Rollar va huquqlar' },
   admin_notify: { ru: 'Уведомления', uz: 'Bildirishnomalar' },
   admin_settings: { ru: 'Общие настройки', uz: 'Umumiy sozlamalar' },
+  admin_telegram: { ru: 'Telegram', uz: 'Telegram' },
+  setting_company_name: { ru: 'Название компании', uz: 'Kompaniya nomi' },
+  setting_order_number_prefix: { ru: 'Префикс номера проекта', uz: 'Proyekt raqami prefiksi' },
+  setting_order_number_padding: { ru: 'Цифр в номере', uz: 'Raqamdagi xonalar soni' },
+  setting_default_lang: { ru: 'Язык по умолчанию', uz: 'Standart til' },
+  setting_kick_oldest_session: {
+    ru: 'Завершать самую старую сессию при превышении лимита',
+    uz: 'Limit oshganda eng eski sessiyani uzish',
+  },
+  setting_kick_oldest_session_hint: {
+    ru: 'Если выключено — новый вход будет запрещён при превышении лимита',
+    uz: 'O‘chirilsa — limit oshganda yangi kirish taqiqlanadi',
+  },
+  setting_claim_enabled: { ru: 'Техник может взять проект себе', uz: 'Texnik proyektni o‘zi olishi mumkin' },
+  setting_claim_enabled_hint: {
+    ru: 'Кнопка «Взять себе» на канбане и в карточке проекта',
+    uz: 'Kanban va proyekt kartasidagi «O‘zimga olaman» tugmasi',
+  },
+  setting_log_retention: {
+    ru: 'Хранение системных логов',
+    uz: 'Tizim loglarini saqlash muddati',
+  },
+  setting_log_retention_hint: {
+    ru: 'Логи старше указанного количества дней будут автоматически удаляться. История перемещений проектов сохраняется отдельно.',
+    uz: "Belgilangan kundan eski loglar avtomatik o'chiriladi. Proyekt harakatlari tarixi alohida saqlanadi.",
+  },
+  days: { ru: 'дней', uz: 'kun' },
+  log_cleanup_btn: { ru: 'Очистить старые', uz: 'Eskilarini tozalash' },
+  setting_max_upload: {
+    ru: 'Максимальный размер файла',
+    uz: 'Fayl hajmi bo‘yicha limit',
+  },
+  setting_max_upload_hint: {
+    ru: 'Ограничение на размер одного загружаемого файла (МБ)',
+    uz: 'Yuklanadigan bitta fayl uchun hajm chegarasi (MB)',
+  },
+  setting_max_upload_unlimited: { ru: 'Без ограничения', uz: 'Cheklovsiz' },
+
+  // ish kalendari
+  setting_workcalendar_title: { ru: 'Рабочий календарь дедлайнов', uz: 'Dedlaynlar uchun ish kalendari' },
+  setting_deadline_calendar_enabled: {
+    ru: 'Считать дедлайны этапов по рабочему календарю',
+    uz: 'Bosqich dedlaynlarini ish kalendariga qarab hisoblash',
+  },
+  setting_deadline_calendar_enabled_hint: {
+    ru: 'Если выключено — дедлайн этапа считается как простое время (норматив часов без учёта выходных)',
+    uz: "O'chirilgan bo'lsa — bosqich dedlayni oddiy soat hisobida (dam kuni/bayram hisobga olinmay) belgilanadi",
+  },
+  setting_work_days: { ru: 'Рабочие дни недели', uz: 'Haftaning ish kunlari' },
+  setting_work_hours: { ru: 'Рабочие часы', uz: 'Ish vaqti' },
+  setting_overdue_reminder_hours: { ru: 'Повтор напоминания о просрочке, часов', uz: 'Kechikish eslatmasini qayta yuborish, soat' },
+  setting_overdue_reminder_hours_hint: {
+    ru: 'Через сколько часов повторно уведомлять, пока этап остаётся просроченным',
+    uz: "Bosqich kechikkanicha turgan bo'lsa, necha soatda qayta ogohlantirilsin",
+  },
+  setting_order_deadline_reminder_hours: {
+    ru: 'Повтор напоминания об общем дедлайне, часов',
+    uz: 'Umumiy dedlayn eslatmasini qayta yuborish, soat',
+  },
+  setting_order_deadline_reminder_hours_hint: {
+    ru: 'Если общий дедлайн проекта (не этапа) истёк — через сколько часов напоминать администратору повторно',
+    uz: "Proyektning umumiy dedlayni (bosqich emas) o'tsa, adminga necha soatda qayta eslatilsin",
+  },
+  weekday_mon: { ru: 'Пн', uz: 'Dush' },
+  weekday_tue: { ru: 'Вт', uz: 'Sesh' },
+  weekday_wed: { ru: 'Ср', uz: 'Chor' },
+  weekday_thu: { ru: 'Чт', uz: 'Pay' },
+  weekday_fri: { ru: 'Пт', uz: 'Jum' },
+  weekday_sat: { ru: 'Сб', uz: 'Shan' },
+  weekday_sun: { ru: 'Вс', uz: 'Yak' },
+
+  holidays_title: { ru: 'Праздники и выходные', uz: 'Bayramlar va dam olish kunlari' },
+  holidays_hint: {
+    ru: 'Даты без года повторяются каждый год (например Навруз). С годом — только в указанном году (например переходящие религиозные праздники).',
+    uz: "Yilsiz sanalar har yili takrorlanadi (masalan Navro'z). Yil bilan — faqat o'sha yilga tegishli (masalan ko'chma diniy bayramlar).",
+  },
+  holiday_add: { ru: 'Добавить праздник', uz: "Bayram qo'shish" },
+  holiday_day: { ru: 'День', uz: 'Kun' },
+  holiday_month: { ru: 'Месяц', uz: 'Oy' },
+  holiday_year: { ru: 'Год (необязательно)', uz: 'Yil (ixtiyoriy)' },
+  holiday_year_recurring: { ru: 'Каждый год', uz: 'Har yili' },
+  holiday_name_ru: { ru: 'Название (рус.)', uz: 'Nomi (rus)' },
+  holiday_name_uz: { ru: 'Название (узб.)', uz: 'Nomi (uz)' },
+  holiday_empty: { ru: 'Праздники не добавлены', uz: "Bayramlar qo'shilmagan" },
+
+  // Telegram
+  setting_telegram_title: { ru: 'Telegram-бот', uz: 'Telegram bot' },
+  setting_telegram_token: { ru: 'Токен бота', uz: 'Bot tokeni' },
+  setting_telegram_token_hint: {
+    ru: 'Получите токен у @BotFather в Telegram и вставьте сюда',
+    uz: "Telegramda @BotFather orqali token oling va shu yerga qo'ying",
+  },
+  setting_telegram_enabled: { ru: 'Telegram-интеграция включена', uz: 'Telegram integratsiyasi yoqilgan' },
+  setting_telegram_test: { ru: 'Проверить', uz: 'Tekshirish' },
+  setting_telegram_test_ok: { ru: 'Подключено: @', uz: 'Ulandi: @' },
+  setting_telegram_test_fail: { ru: 'Не удалось подключиться — проверьте токен', uz: "Ulanmadi — tokenni tekshiring" },
+  setting_telegram_digest_enabled: { ru: 'Отправлять список задач', uz: 'Vazifalar ro\'yxatini yuborish' },
+  setting_telegram_digest_daily: { ru: 'Ежедневно', uz: 'Har kuni' },
+  setting_telegram_digest_weekly: { ru: 'Еженедельно', uz: 'Har hafta' },
+  setting_telegram_digest_time: { ru: 'Время отправки', uz: 'Yuborish vaqti' },
+  setting_telegram_digest_weekday: { ru: 'День недели', uz: 'Hafta kuni' },
+  telegram_contacts_title: { ru: 'Пользователи Telegram', uz: 'Telegram foydalanuvchilari' },
+  telegram_contacts_hint: {
+    ru: 'Список тех, кто нажал /start у бота. Привяжите каждого к сотруднику системы.',
+    uz: "Botga /start bosganlar ro'yxati. Har birini tizim xodimiga biriktiring.",
+  },
+  telegram_contacts_empty: { ru: 'Пока никто не нажал /start', uz: "Hali hech kim /start bosmagan" },
+  telegram_started_at: { ru: 'Дата /start', uz: '/start bosgan vaqt' },
+  telegram_link: { ru: 'Привязать', uz: 'Biriktirish' },
+  telegram_unlink: { ru: 'Отвязать', uz: 'Bekor qilish' },
+  telegram_already_linked: {
+    ru: 'Этот сотрудник уже привязан к другому Telegram-аккаунту',
+    uz: 'Bu xodim allaqachon boshqa Telegram akkauntga biriktirilgan',
+  },
+
+  setting_tooth_labels_title: { ru: 'Номера зубов', uz: 'Tishlar raqami' },
+  setting_tooth_labels_hint: {
+    ru: 'Какой номер показывать для каждого зуба (можно поменять на свой)',
+    uz: "Har bir tish uchun qaysi raqam ko'rsatilishi (o'zingizga moslab o'zgartirishingiz mumkin)",
+  },
+
   stage_name: { ru: 'Название этапа', uz: 'Bosqich nomi' },
   stage_color: { ru: 'Цвет', uz: 'Rang' },
   stage_duration: { ru: 'Норматив, часов', uz: 'Normativ, soat' },
@@ -147,6 +269,26 @@ export const dict: Dict = {
   send: { ru: 'Отправить', uz: 'Yuborish' },
   attach: { ru: 'Прикрепить', uz: 'Biriktirish' },
   no_messages: { ru: 'Сообщений пока нет', uz: 'Hozircha xabar yo‘q' },
+  add_member: { ru: 'Добавить участника', uz: 'A\'zo qo\'shish' },
+
+  // kanban karta maydonlari
+  card_fields: { ru: 'Поля карточки', uz: 'Karta maydonlari' },
+  cf_number: { ru: 'Номер', uz: 'Raqam' },
+  cf_title: { ru: 'Название', uz: 'Nomi' },
+  cf_patient: { ru: 'Пациент', uz: 'Patsent' },
+  cf_doctor: { ru: 'Врач', uz: 'Vrach' },
+  cf_services: { ru: 'Услуги', uz: 'Xizmatlar' },
+  cf_responsible: { ru: 'Ответственный', uz: "Mas'ul" },
+  cf_deadline: { ru: 'Дедлайн', uz: 'Dedlayn' },
+  cf_priority: { ru: 'Приоритет', uz: 'Prioritet' },
+  cf_files: { ru: 'Файлы', uz: 'Fayllar' },
+
+  // korzinka
+  trash: { ru: 'Корзина', uz: 'Savat' },
+  restore: { ru: 'Восстановить', uz: 'Tiklash' },
+  deleted_at: { ru: 'Удалён', uz: "O'chirilgan" },
+  order_restored: { ru: 'Проект восстановлен', uz: 'Proyekt tiklandi' },
+  order_deleted_undo: { ru: 'Проект перемещён в корзину', uz: 'Proyekt savatga tashlandi' },
 }
 
 interface LangState {

@@ -6,6 +6,7 @@ import { Tabs } from '@/components/ui'
 import AdminStages from '@/pages/admin/Stages'
 import AdminFields from '@/pages/admin/Fields'
 import AdminRequirements from '@/pages/admin/Requirements'
+import AdminLayout from '@/pages/admin/Layout'
 import AdminRoles from '@/pages/admin/Roles'
 import AdminNotify from '@/pages/admin/Notify'
 import AdminSettings from '@/pages/admin/Settings'
@@ -13,7 +14,7 @@ import AdminTelegram from '@/pages/admin/Telegram'
 
 export default function AdminPage() {
   const t = useT()
-  const { can } = useAuth()
+  const { can, me } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
@@ -21,11 +22,12 @@ export default function AdminPage() {
     { value: 'stages', label: t('admin_stages'), perm: 'admin.stages' },
     { value: 'fields', label: t('admin_fields'), perm: 'admin.fields' },
     { value: 'requirements', label: t('admin_required'), perm: 'admin.fields' },
+    { value: 'layout', label: t('admin_layout'), perm: null },
     { value: 'roles', label: t('admin_roles'), perm: 'admin.roles' },
     { value: 'notify', label: t('admin_notify'), perm: 'admin.notify' },
     { value: 'settings', label: t('admin_settings'), perm: 'admin.settings' },
     { value: 'telegram', label: t('admin_telegram'), perm: 'admin.settings' },
-  ].filter((s) => can(s.perm))
+  ].filter((s) => (s.perm ? can(s.perm) : Boolean(me?.is_super)))
 
   if (sections.length === 0) return <Navigate to="/" replace />
 
@@ -43,6 +45,7 @@ export default function AdminPage() {
           <Route path="stages" element={<AdminStages />} />
           <Route path="fields" element={<AdminFields />} />
           <Route path="requirements" element={<AdminRequirements />} />
+          <Route path="layout" element={<AdminLayout />} />
           <Route path="roles" element={<AdminRoles />} />
           <Route path="notify" element={<AdminNotify />} />
           <Route path="settings" element={<AdminSettings />} />

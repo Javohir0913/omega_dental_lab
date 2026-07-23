@@ -8,7 +8,7 @@ import { useLang, useNm, useT } from '@/i18n'
 import { Avatar, Badge, Empty, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import OrderForm from '@/components/OrderForm'
-import { dt, fromNow } from '@/lib/format'
+import { deadlineInfo, dt, fromNow } from '@/lib/format'
 import type { OrderCard, Page, Stage } from '@/lib/types'
 
 export default function OrdersPage() {
@@ -239,7 +239,8 @@ export default function OrdersPage() {
                 <th className="px-3 py-2 font-medium">{t('patient')}</th>
                 <th className="px-3 py-2 font-medium">{t('doctor')}</th>
                 <th className="px-3 py-2 font-medium">{t('responsible')}</th>
-                {!trash && <th className="px-3 py-2 font-medium">{t('deadline')}</th>}
+                {!trash && <th className="px-3 py-2 font-medium">{t('cf_deadline')}</th>}
+                {!trash && <th className="px-3 py-2 font-medium">{t('cf_project_deadline')}</th>}
                 {trash && <th className="px-3 py-2 font-medium">{t('deleted_at')}</th>}
                 {trash && <th className="px-3 py-2 font-medium" />}
               </tr>
@@ -285,7 +286,21 @@ export default function OrdersPage() {
                       <td
                         className={clsx(
                           'whitespace-nowrap px-3 py-2 text-xs',
-                          o.is_overdue ? 'font-medium text-rose-600' : 'text-ink-soft',
+                          !o.is_closed && deadlineInfo(o.stage_deadline)?.overdue
+                            ? 'font-medium text-rose-600'
+                            : 'text-ink-soft',
+                        )}
+                      >
+                        {o.stage_deadline ? dt(o.stage_deadline) : '—'}
+                      </td>
+                    )}
+                    {!trash && (
+                      <td
+                        className={clsx(
+                          'whitespace-nowrap px-3 py-2 text-xs',
+                          !o.is_closed && deadlineInfo(o.deadline)?.overdue
+                            ? 'font-medium text-rose-600'
+                            : 'text-ink-soft',
                         )}
                       >
                         {o.deadline ? dt(o.deadline) : '—'}

@@ -124,3 +124,6 @@ class OrderStageHistory(Base):
     was_overdue: Mapped[bool] = mapped_column(Boolean, default=False)
     overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # stage_deadline - left_at (sekundlarda) shu bosqichdan chiqqan payt uchun;
+    # manfiy bo'lsa — kechikish; orqaga qaytarilganda dedlaynni tiklash uchun ishlatiladi
+    remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

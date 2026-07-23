@@ -6,6 +6,7 @@ from app.api.v1 import (
     catalog,
     chat,
     files,
+    layout,
     logs,
     notifications,
     orders,
@@ -30,4 +31,5 @@ api_router.include_router(files.router)
 api_router.include_router(notifications.router)
 api_router.include_router(logs.router)
 api_router.include_router(admin.router)
+api_router.include_router(layout.router)
 api_router.include_router(ws.router)

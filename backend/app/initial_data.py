@@ -16,7 +16,11 @@ from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal
 from app.models import (
     DEFAULT_SETTINGS,
+    CustomField,
+    FieldEntity,
     Holiday,
+    OrderFieldLayout,
+    OrderFieldSection,
     Permission,
     Role,
     Setting,
@@ -159,6 +163,48 @@ async def seed_holidays(db) -> None:  # noqa: ANN001
     await db.flush()
 
 
+# Hozirgi (kod ichidagi qattiq tartib) — birinchi seed'da shu tartibda "Инфо"
+# bo'limiga joylashadi, shundan keyin super-admin /admin/layout orqali o'zi sozlaydi.
+DEFAULT_LAYOUT_SYSTEM_REFS = [
+    "sys:title", "sys:photo_file_id", "sys:patient_id", "sys:doctor_id",
+    "sys:services", "sys:teeth", "sys:deadline", "sys:responsible_id",
+    "sys:priority", "sys:description",
+]
+
+
+async def seed_order_layout(db) -> None:  # noqa: ANN001
+    """Bo'lim/tartib sozlamasini bir marta boshlang'ich holat bilan to'ldiradi.
+
+    Super-admin allaqachon sozlagan bo'lsa (kamida bitta bo'lim bor) — tegilmaydi.
+    """
+    res = await db.execute(select(OrderFieldSection).where(OrderFieldSection.entity == "order"))
+    if res.scalars().first() is not None:
+        return
+
+    section = OrderFieldSection(entity="order", code="info", name_ru="Инфо", name_uz="Info", sort=100)
+    db.add(section)
+    await db.flush()
+
+    sort = 0
+    for ref in DEFAULT_LAYOUT_SYSTEM_REFS:
+        sort += 100
+        db.add(OrderFieldLayout(entity="order", section_id=section.id, field_ref=ref, sort=sort))
+
+    res = await db.execute(
+        select(CustomField)
+        .where(CustomField.entity == FieldEntity.ORDER, CustomField.is_active.is_(True))
+        .order_by(CustomField.sort, CustomField.id)
+    )
+    for f in res.scalars().all():
+        sort += 100
+        db.add(
+            OrderFieldLayout(entity="order", section_id=section.id, field_ref=f"cf:{f.id}", sort=sort)
+        )
+
+    await db.flush()
+    log.info("Loyiha maydonlari bo'limi yaratildi: Инфо")
+
+
 async def seed_superadmin(db) -> None:  # noqa: ANN001
     res = await db.execute(select(Role).where(Role.code == "super_admin"))
     role = res.scalar_one()
@@ -192,6 +238,7 @@ async def main() -> None:
         await seed_services(db)
         await seed_settings(db)
         await seed_holidays(db)
+        await seed_order_layout(db)
         await seed_superadmin(db)
         await db.commit()
     log.info("Seed tayyor.")

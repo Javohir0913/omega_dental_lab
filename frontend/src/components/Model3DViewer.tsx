@@ -12,11 +12,21 @@ interface Props {
   onDownload: () => void
 }
 
+// Yorug'lik manbalarining boshlang'ich (100%) intensivligi — slider shu qiymatlarni ko'paytiradi
+const BASE_LIGHT = { hemi: 1.1, ambient: 0.55, head: 1.1, fill: 0.35 }
+
 export default function Model3DViewer({ url, name, onClose, onDownload }: Props) {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   const canvasRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lightMult, setLightMult] = useState(1)
+  const lightsRef = useRef<{
+    hemi: THREE.HemisphereLight
+    ambient: THREE.AmbientLight
+    head: THREE.DirectionalLight
+    fill: THREE.DirectionalLight
+  } | null>(null)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -35,9 +45,6 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x0f172a)
 
-    const grid = new THREE.GridHelper(200, 40, 0x334155, 0x1e293b)
-    scene.add(grid)
-
     const w = container.clientWidth
     const h = container.clientHeight
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 10000)
@@ -45,15 +52,28 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
     renderer.setSize(w, h)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3))
     renderer.shadowMap.enabled = false
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8)
+    // Yumshoq, hamma tomondan bir xil yoritish — soyalar qattiq qorong'i bo'lib qolmasligi uchun
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x606870, BASE_LIGHT.hemi)
+    scene.add(hemi)
+    const ambient = new THREE.AmbientLight(0xffffff, BASE_LIGHT.ambient)
     scene.add(ambient)
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
-    dirLight.position.set(100, 200, 100)
-    scene.add(dirLight)
+    // "Fonar" — doim kamera tomonidan yoritadi, shuning uchun modelni har qanday burchakdan
+    // aylantirganda ham qorong'i tomon qolmaydi
+    const headLight = new THREE.DirectionalLight(0xffffff, BASE_LIGHT.head)
+    scene.add(headLight)
+    // Qarama-qarshi tomondan yumshoq to'ldiruvchi yorug'lik — tekis "kartondek" ko'rinmasligi uchun
+    const fillLight = new THREE.DirectionalLight(0xffffff, BASE_LIGHT.fill)
+    fillLight.position.set(-100, 50, -150)
+    scene.add(fillLight)
+
+    lightsRef.current = { hemi, ambient, head: headLight, fill: fillLight }
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -74,10 +94,14 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
       const maxDim = Math.max(size.x, size.y, size.z) || 1
       const scale = 100 / maxDim
 
+      // Ba'zi PLY fayllarda skanerdan olingan asl rang (har bir nuqta uchun) bo'ladi —
+      // bo'lsa o'shani ko'rsatamiz, bo'lmasa neytral kulrang material.
+      const hasVertexColors = !!geometry.attributes.color
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x94a3b8,
-        metalness: 0.2,
-        roughness: 0.62,
+        color: hasVertexColors ? 0xffffff : 0x94a3b8,
+        vertexColors: hasVertexColors,
+        metalness: 0.15,
+        roughness: 0.55,
         side: THREE.DoubleSide,
       })
       const mesh = new THREE.Mesh(geometry, mat)
@@ -105,10 +129,13 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
             (obj) => {
               obj.traverse((child: any) => {
                 if (child.isMesh) {
+                  child.geometry?.computeVertexNormals?.()
+                  const hasVertexColors = !!child.geometry?.attributes?.color
                   child.material = new THREE.MeshStandardMaterial({
-                    color: 0x94a3b8,
-                    metalness: 0.2,
-                    roughness: 0.62,
+                    color: hasVertexColors ? 0xffffff : 0x94a3b8,
+                    vertexColors: hasVertexColors,
+                    metalness: 0.15,
+                    roughness: 0.55,
                     side: THREE.DoubleSide,
                   })
                 }
@@ -164,6 +191,8 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
       if (!running) return
       animId = requestAnimationFrame(animate)
       controls.update()
+      // Fonar doim kamera qayerda bo'lsa o'sha yerdan yoritadi — model qanday burilsa ham qorong'i qolmaydi
+      headLight.position.copy(camera.position)
       renderer.render(scene, camera)
     }
     animate()
@@ -175,6 +204,7 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
       window.removeEventListener('resize', onResize)
       controls.dispose()
       renderer.dispose()
+      lightsRef.current = null
       try {
         renderer.domElement.remove()
       } catch {
@@ -184,6 +214,16 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
 
     return () => cleanup()
   }, [url, name, ext])
+
+  // Yorug'lik slaydери — modelni qayta yuklamasdan, faqat intensivlikni jonli o'zgartiradi
+  useEffect(() => {
+    const l = lightsRef.current
+    if (!l) return
+    l.hemi.intensity = BASE_LIGHT.hemi * lightMult
+    l.ambient.intensity = BASE_LIGHT.ambient * lightMult
+    l.head.intensity = BASE_LIGHT.head * lightMult
+    l.fill.intensity = BASE_LIGHT.fill * lightMult
+  }, [lightMult, loading])
 
   return (
     <div
@@ -230,6 +270,24 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
             <button onClick={onDownload} className="mt-2 rounded-md bg-[#1e293b] px-4 py-2 text-xs text-slate-300 hover:bg-[#334155]">
               Yuklab olish
             </button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg border border-[#1e293b] bg-[#0f172a]/90 px-3 py-2 backdrop-blur-sm">
+            <span className="text-sm" title="Yorug'lik">☀️</span>
+            <input
+              type="range"
+              min={0.4}
+              max={2.2}
+              step={0.1}
+              value={lightMult}
+              onChange={(e) => setLightMult(Number(e.target.value))}
+              className="w-28 accent-[#7dd3fc]"
+            />
+            <span className="w-9 text-right text-[10px] tabular-nums text-slate-500">
+              {Math.round(lightMult * 100)}%
+            </span>
           </div>
         )}
       </div>

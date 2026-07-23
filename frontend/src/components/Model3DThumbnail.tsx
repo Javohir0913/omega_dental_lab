@@ -22,16 +22,29 @@ function renderSnapshot(ext: string, objectUrl: string): Promise<string> {
     const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
     renderer.setSize(SNAPSHOT_SIZE, SNAPSHOT_SIZE)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.9))
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
-    dirLight.position.set(100, 200, 150)
-    scene.add(dirLight)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x606870, 1.1))
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55))
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.1)
+    keyLight.position.set(100, 200, 150)
+    scene.add(keyLight)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.5)
+    fillLight.position.set(-120, 80, -100)
+    scene.add(fillLight)
 
-    const material = new THREE.MeshStandardMaterial({
+    const plainMaterial = new THREE.MeshStandardMaterial({
       color: 0x94a3b8,
-      metalness: 0.2,
-      roughness: 0.62,
+      metalness: 0.15,
+      roughness: 0.55,
+      side: THREE.DoubleSide,
+    })
+    const vertexColorMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      metalness: 0.15,
+      roughness: 0.55,
       side: THREE.DoubleSide,
     })
 
@@ -43,13 +56,15 @@ function renderSnapshot(ext: string, objectUrl: string): Promise<string> {
       renderer.render(scene, camera)
       const dataUrl = renderer.domElement.toDataURL('image/png')
       renderer.dispose()
-      material.dispose()
+      plainMaterial.dispose()
+      vertexColorMaterial.dispose()
       resolve(dataUrl)
     }
 
     const fail = () => {
       renderer.dispose()
-      material.dispose()
+      plainMaterial.dispose()
+      vertexColorMaterial.dispose()
       reject(new Error('render_failed'))
     }
 
@@ -65,7 +80,7 @@ function renderSnapshot(ext: string, objectUrl: string): Promise<string> {
       box.getSize(size)
       const maxDim = Math.max(size.x, size.y, size.z) || 1
       const scale = 100 / maxDim
-      const mesh = new THREE.Mesh(geo, material)
+      const mesh = new THREE.Mesh(geo, geo.attributes.color ? vertexColorMaterial : plainMaterial)
       mesh.scale.setScalar(scale)
       finish(mesh, maxDim, scale)
     }
@@ -79,7 +94,10 @@ function renderSnapshot(ext: string, objectUrl: string): Promise<string> {
         objectUrl,
         (obj) => {
           obj.traverse((child: any) => {
-            if (child.isMesh) child.material = material
+            if (child.isMesh) {
+              child.geometry?.computeVertexNormals?.()
+              child.material = child.geometry?.attributes?.color ? vertexColorMaterial : plainMaterial
+            }
           })
           const box = new THREE.Box3().setFromObject(obj)
           const size = new THREE.Vector3()

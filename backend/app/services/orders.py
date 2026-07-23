@@ -128,16 +128,38 @@ async def close_history(db: AsyncSession, order: Order, comment: str | None = No
     row.responsible_id = order.responsible_id  # kim yakunda ishlagan bo'lsa
     if order.stage_deadline:
         row.was_overdue = now > order.stage_deadline
+        row.remaining_seconds = int((order.stage_deadline - now).total_seconds())
     if comment:
         row.comment = comment
     await db.flush()
 
 
-async def apply_stage_deadline(db: AsyncSession, order: Order, stage: Stage) -> None:
+async def apply_stage_deadline(
+    db: AsyncSession, order: Order, stage: Stage, *, from_stage: Stage | None = None
+) -> None:
     order.stage_entered_at = now_utc()
     if not stage.duration_hours:
         order.stage_deadline = None
         return
+
+    # Orqaga (oldingi bosqichga) qaytarilganda — dedlaynni qaytadan to'liq boshlash
+    # o'rniga, o'sha bosqichda oxirgi marta turganda qancha vaqt qolgan bo'lsa, o'shani tiklaymiz.
+    if from_stage is not None and stage.sort < from_stage.sort:
+        res = await db.execute(
+            select(OrderStageHistory.remaining_seconds)
+            .where(
+                OrderStageHistory.order_id == order.id,
+                OrderStageHistory.stage_id == stage.id,
+                OrderStageHistory.left_at.is_not(None),
+                OrderStageHistory.remaining_seconds.is_not(None),
+            )
+            .order_by(OrderStageHistory.left_at.desc())
+            .limit(1)
+        )
+        remaining = res.scalar_one_or_none()
+        if remaining is not None:
+            order.stage_deadline = order.stage_entered_at + timedelta(seconds=max(0, remaining))
+            return
 
     cal = await workcalendar.load_calendar(db)
     if cal.enabled:
@@ -242,7 +264,7 @@ async def move_to_stage(
 
     order.stage_id = to_stage.id
     order.stage = to_stage
-    await apply_stage_deadline(db, order, to_stage)
+    await apply_stage_deadline(db, order, to_stage, from_stage=from_stage)
 
     # Yangi bosqich mas'uli:
     #  1) chaqiruvda aniq berilgan bo'lsa — o'sha

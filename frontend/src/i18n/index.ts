@@ -24,6 +24,8 @@ export const dict: Dict = {
   confirm_delete: { ru: 'Точно удалить?', uz: "Rostdan o'chirilsinmi?" },
   none: { ru: 'Не выбрано', uz: 'Tanlanmagan' },
   required: { ru: 'Обязательно', uz: 'Majburiy' },
+  move_back: { ru: 'Вернуть назад', uz: 'Orqaga qaytarish' },
+  move_back_confirm: { ru: 'Вернуть карточку на этап', uz: 'Kartani quyidagi bosqichga qaytarasizmi' },
 
   // auth
   login: { ru: 'Вход', uz: 'Kirish' },
@@ -106,6 +108,7 @@ export const dict: Dict = {
   admin_stages: { ru: 'Этапы и канбан', uz: 'Bosqichlar va kanban' },
   admin_fields: { ru: 'Поля', uz: 'Maydonlar' },
   admin_required: { ru: 'Обязательные поля', uz: 'Majburiy maydonlar' },
+  admin_layout: { ru: 'Расположение полей', uz: 'Maydonlar joylashuvi' },
   admin_roles: { ru: 'Роли и права', uz: 'Rollar va huquqlar' },
   admin_notify: { ru: 'Уведомления', uz: 'Bildirishnomalar' },
   admin_settings: { ru: 'Общие настройки', uz: 'Umumiy sozlamalar' },
@@ -279,7 +282,8 @@ export const dict: Dict = {
   cf_doctor: { ru: 'Врач', uz: 'Vrach' },
   cf_services: { ru: 'Услуги', uz: 'Xizmatlar' },
   cf_responsible: { ru: 'Ответственный', uz: "Mas'ul" },
-  cf_deadline: { ru: 'Дедлайн', uz: 'Dedlayn' },
+  cf_deadline: { ru: 'Дедлайн этапа', uz: 'Bosqich dedlayni' },
+  cf_project_deadline: { ru: 'Дедлайн проекта', uz: 'Loyiha dedlayni' },
   cf_priority: { ru: 'Приоритет', uz: 'Prioritet' },
   cf_files: { ru: 'Файлы', uz: 'Fayllar' },
 

@@ -66,6 +66,28 @@ export function deadlineInfo(v: string | null | undefined): {
   }
 }
 
+/**
+ * UTC ISO satrini <input type="datetime-local"> uchun mahalliy (brauzer) vaqt
+ * qiymatiga o'giradi. Xom `.slice(0,16)` ishlatish XATO — u UTC satrni
+ * o'girmasdan qirqib, mahalliy vaqt sifatida ko'rsatib qo'yardi (~5 soatga siljib ketardi).
+ */
+export function toLocalInput(v: string | null | undefined): string {
+  const d = parse(v)
+  if (!d) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** <input type="datetime-local"> qiymatini (mahalliy vaqt) UTC ISO satriga o'giradi. */
+export function fromLocalInput(v: string): string | null {
+  if (!v) return null
+  const [datePart, timePart] = v.split('T')
+  const [y, m, d] = datePart.split('-').map(Number)
+  const [h, min] = (timePart ?? '00:00').split(':').map(Number)
+  const parsed = new Date(y, m - 1, d, h, min)
+  return isValid(parsed) ? parsed.toISOString() : null
+}
+
 export function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`

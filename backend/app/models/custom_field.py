@@ -114,8 +114,10 @@ SYSTEM_ORDER_FIELDS = [
     ("sys:patient_id", "Пациент", "Patsent"),
     ("sys:doctor_id", "Врач", "Vrach"),
     ("sys:services", "Услуги", "Xizmatlar"),
+    ("sys:teeth", "Зубная карта", "Tish sxemasi"),
     ("sys:deadline", "Дедлайн", "Dedlayn"),
     ("sys:responsible_id", "Ответственный", "Mas'ul"),
+    ("sys:priority", "Приоритет", "Prioritet"),
     ("sys:description", "Описание", "Tavsif"),
     ("sys:files", "Файлы", "Fayllar"),
 ]

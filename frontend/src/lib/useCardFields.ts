@@ -8,6 +8,7 @@ const DEFAULT_VISIBILITY: Record<string, boolean> = {
   services: true,
   responsible: true,
   deadline: true,
+  project_deadline: true,
   priority: true,
   files: true,
 }

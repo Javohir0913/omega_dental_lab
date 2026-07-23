@@ -167,6 +167,7 @@ export interface OrderCard {
   files_count: number
   has_3d_files: boolean
   unread_messages: number
+  unread_files_count: number
   deleted_at: string | null
 }
 
@@ -216,6 +217,31 @@ export interface CustomField {
   show_in_list: boolean
   sort: number
   is_active: boolean
+}
+
+export interface OrderFieldSection {
+  id: number
+  code: string
+  name_ru: string
+  name_uz: string
+  sort: number
+}
+
+export interface LayoutField {
+  field_ref: string
+  kind: 'system' | 'custom'
+  label_ru: string
+  label_uz: string
+  custom_field: CustomField | null
+}
+
+export interface LayoutSection {
+  id: number | null
+  code: string
+  name_ru: string
+  name_uz: string
+  sort: number
+  fields: LayoutField[]
 }
 
 export interface StageRequirement {

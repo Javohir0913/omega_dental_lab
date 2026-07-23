@@ -10,8 +10,9 @@ from app.models.custom_field import (
     RequirementMoment,
     StageRequirement,
 )
-from app.models.file import FileAsset, FileEntity
+from app.models.file import FileAsset, FileEntity, OrderFileRead
 from app.models.holiday import Holiday
+from app.models.layout import OrderFieldLayout, OrderFieldSection
 from app.models.log import ActivityLog, LogCategory, LogLevel
 from app.models.notify import Notification, NotifyEvent, NotifyTemplate, Recipient
 from app.models.order import Order, OrderStageHistory, order_services
@@ -33,8 +34,9 @@ __all__ = [
     "Chat", "ChatMember", "ChatType", "Message",
     "CustomField", "CustomFieldValue", "FieldEntity", "FieldType",
     "RequirementMoment", "StageRequirement", "SYSTEM_ORDER_FIELDS",
-    "FileAsset", "FileEntity",
+    "FileAsset", "FileEntity", "OrderFileRead",
     "Holiday",
+    "OrderFieldLayout", "OrderFieldSection",
     "ActivityLog", "LogCategory", "LogLevel",
     "Notification", "NotifyEvent", "NotifyTemplate", "Recipient",
     "Order", "OrderStageHistory", "order_services",

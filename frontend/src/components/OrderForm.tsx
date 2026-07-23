@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
@@ -7,11 +8,12 @@ import { Field, Modal, SearchSelect } from '@/components/ui'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import ToothChart from '@/components/ToothChart'
 import { useToothLabels } from '@/lib/useToothLabels'
+import { fromLocalInput, toLocalInput } from '@/lib/format'
 import { PatientForm } from '@/pages/Patients'
 import { DoctorForm } from '@/pages/Doctors'
 import type {
-  CustomField,
   Doctor,
+  LayoutSection,
   OrderDetail,
   Page,
   Patient,
@@ -45,7 +47,7 @@ export default function OrderForm({
   const [pSearch, setPSearch] = useState('')
   const [dSearch, setDSearch] = useState('')
   const [serviceIds, setServiceIds] = useState<number[]>(order?.services.map((s) => s.id) ?? [])
-  const [deadline, setDeadline] = useState(order?.deadline?.slice(0, 16) ?? '')
+  const [deadline, setDeadline] = useState(toLocalInput(order?.deadline))
   const [priority, setPriority] = useState(order?.priority ?? 500)
   const [description, setDescription] = useState(order?.description ?? '')
   const [cf, setCf] = useState<Record<string, unknown>>(order?.custom_fields ?? {})
@@ -65,10 +67,9 @@ export default function OrderForm({
     queryKey: ['services-select'],
     queryFn: async () => (await api.get<ServiceItem[]>('/services')).data,
   })
-  const { data: fields } = useQuery({
-    queryKey: ['fields', 'order'],
-    queryFn: async () =>
-      (await api.get<CustomField[]>('/admin/fields', { params: { entity: 'order' } })).data,
+  const { data: layout = [] } = useQuery({
+    queryKey: ['order-layout'],
+    queryFn: async () => (await api.get<LayoutSection[]>('/order-layout')).data,
   })
 
   async function submit() {
@@ -81,7 +82,7 @@ export default function OrderForm({
       patient_id: patientId,
       doctor_id: doctorId,
       service_ids: serviceIds,
-      deadline: deadline || null,
+      deadline: fromLocalInput(deadline),
       priority,
       description: description.trim() || null,
       teeth,
@@ -107,7 +108,6 @@ export default function OrderForm({
     }
   }
 
-  const activeFields = (fields ?? []).filter((f) => f.is_active)
   const err = (ref: string) => (missing.has(ref) ? t('required') : null)
 
   const patList = (patients?.items ?? []).filter((p) => {
@@ -138,142 +138,175 @@ export default function OrderForm({
       }
     >
       <div className="grid gap-x-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <Field label={t('order_title')} required error={err('sys:title')}>
-            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-          </Field>
-        </div>
-
-        <div className="sm:col-span-2">
-          <Field label={lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}>
-            <FileFieldInput
-              value={photoFileId}
-              onChange={(v) => setPhotoFileId(Array.isArray(v) ? (v[0] as number) ?? null : (v as number | null))}
-              orderId={order?.id}
-              lang={lang}
-              multiple={false}
-            />
-          </Field>
-        </div>
-
-        <Field label={t('patient')} error={err('sys:patient_id')}>
-          <div className="flex gap-2">
-            <div className="min-w-0 flex-1">
-              <SearchSelect
-                items={patList.map((p) => ({ id: p.id, label: p.full_name, sub: p.phone ? `📞 ${p.phone}` : undefined }))}
-                value={patientId}
-                onChange={setPatientId}
-                search={pSearch}
-                onSearchChange={setPSearch}
-                placeholder={t('search')}
-                clearLabel={t('none')}
-              />
-            </div>
-            {can('patient.manage') && (
-              <button
-                type="button"
-                className="btn-ghost shrink-0 px-2.5"
-                title={t('add')}
-                onClick={() => setCreatingPatient(true)}
+        {(() => {
+          const SYSTEM_RENDERERS: Record<string, () => React.ReactNode> = {
+            'sys:title': () => (
+              <div className="sm:col-span-2" key="sys:title">
+                <Field label={t('order_title')} required error={err('sys:title')}>
+                  <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+                </Field>
+              </div>
+            ),
+            'sys:photo_file_id': () => (
+              <div className="sm:col-span-2" key="sys:photo_file_id">
+                <Field label={lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}>
+                  <FileFieldInput
+                    value={photoFileId}
+                    onChange={(v) => setPhotoFileId(Array.isArray(v) ? (v[0] as number) ?? null : (v as number | null))}
+                    orderId={order?.id}
+                    lang={lang}
+                    multiple={false}
+                  />
+                </Field>
+              </div>
+            ),
+            'sys:patient_id': () => (
+              <Field key="sys:patient_id" label={t('patient')} error={err('sys:patient_id')}>
+                <div className="flex gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SearchSelect
+                      items={patList.map((p) => ({ id: p.id, label: p.full_name, sub: p.phone ? `📞 ${p.phone}` : undefined }))}
+                      value={patientId}
+                      onChange={setPatientId}
+                      search={pSearch}
+                      onSearchChange={setPSearch}
+                      placeholder={t('search')}
+                      clearLabel={t('none')}
+                    />
+                  </div>
+                  {can('patient.manage') && (
+                    <button
+                      type="button"
+                      className="btn-ghost shrink-0 px-2.5"
+                      title={t('add')}
+                      onClick={() => setCreatingPatient(true)}
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </Field>
+            ),
+            'sys:doctor_id': () => (
+              <Field key="sys:doctor_id" label={t('doctor')} error={err('sys:doctor_id')}>
+                <div className="flex gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SearchSelect
+                      items={docList.map((d) => ({ id: d.id, label: d.full_name, sub: d.clinic ? `🏥 ${d.clinic}` : undefined }))}
+                      value={doctorId}
+                      onChange={setDoctorId}
+                      search={dSearch}
+                      onSearchChange={setDSearch}
+                      placeholder={t('search')}
+                      clearLabel={t('none')}
+                    />
+                  </div>
+                  {can('doctor.manage') && (
+                    <button
+                      type="button"
+                      className="btn-ghost shrink-0 px-2.5"
+                      title={t('add')}
+                      onClick={() => setCreatingDoctor(true)}
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
+              </Field>
+            ),
+            'sys:services': () => (
+              <div className="sm:col-span-2" key="sys:services">
+                <Field label={t('services')} error={err('sys:services')}>
+                  <ServiceMultiSelect
+                    services={services ?? []}
+                    selectedIds={serviceIds}
+                    onChange={setServiceIds}
+                    lang={lang}
+                    t={t}
+                  />
+                </Field>
+              </div>
+            ),
+            'sys:teeth': () => (
+              <div className="sm:col-span-2" key="sys:teeth">
+                <Field label={t('teeth')}>
+                  <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
+                </Field>
+              </div>
+            ),
+            'sys:deadline': () => (
+              <Field key="sys:deadline" label={t('deadline')} error={err('sys:deadline')}>
+                <input
+                  type="datetime-local"
+                  className="input"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
+              </Field>
+            ),
+            'sys:priority': () => (
+              <Field
+                key="sys:priority"
+                label={t('priority')}
+                hint={lang === 'ru' ? 'Меньше — выше в колонке' : 'Kam — ustunda tepada'}
               >
-                +
-              </button>
-            )}
-          </div>
-        </Field>
+                <input
+                  type="number"
+                  className="input"
+                  value={priority}
+                  onChange={(e) => setPriority(Number(e.target.value))}
+                />
+              </Field>
+            ),
+            'sys:description': () => (
+              <div className="sm:col-span-2" key="sys:description">
+                <Field label={t('description')} error={err('sys:description')}>
+                  <textarea
+                    className="input min-h-[70px]"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </Field>
+              </div>
+            ),
+          }
 
-        <Field label={t('doctor')} error={err('sys:doctor_id')}>
-          <div className="flex gap-2">
-            <div className="min-w-0 flex-1">
-              <SearchSelect
-                items={docList.map((d) => ({ id: d.id, label: d.full_name, sub: d.clinic ? `🏥 ${d.clinic}` : undefined }))}
-                value={doctorId}
-                onChange={setDoctorId}
-                search={dSearch}
-                onSearchChange={setDSearch}
-                placeholder={t('search')}
-                clearLabel={t('none')}
-              />
-            </div>
-            {can('doctor.manage') && (
-              <button
-                type="button"
-                className="btn-ghost shrink-0 px-2.5"
-                title={t('add')}
-                onClick={() => setCreatingDoctor(true)}
-              >
-                +
-              </button>
-            )}
-          </div>
-        </Field>
-
-        <div className="sm:col-span-2">
-          <Field label={t('services')} error={err('sys:services')}>
-            <ServiceMultiSelect
-              services={services ?? []}
-              selectedIds={serviceIds}
-              onChange={setServiceIds}
-              lang={lang}
-              t={t}
-            />
-          </Field>
-        </div>
-
-        <div className="sm:col-span-2">
-          <Field label={t('teeth')}>
-            <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
-          </Field>
-        </div>
-
-        <Field label={t('deadline')} error={err('sys:deadline')}>
-          <input
-            type="datetime-local"
-            className="input"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
-        </Field>
-
-        <Field
-          label={t('priority')}
-          hint={lang === 'ru' ? 'Меньше — выше в колонке' : 'Kam — ustunda tepada'}
-        >
-          <input
-            type="number"
-            className="input"
-            value={priority}
-            onChange={(e) => setPriority(Number(e.target.value))}
-          />
-        </Field>
-
-        <div className="sm:col-span-2">
-          <Field label={t('description')} error={err('sys:description')}>
-            <textarea
-              className="input min-h-[70px]"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </Field>
-        </div>
-
-        {activeFields.map((f) => (
-          <div key={f.id} className={f.type === 'text' ? 'sm:col-span-2' : ''}>
-            <Field
-              label={lang === 'ru' ? f.label_ru : f.label_uz}
-              required={f.required_on_create}
-              hint={lang === 'ru' ? f.hint_ru : f.hint_uz}
-              error={err(`cf:${f.id}`)}
-            >
-              <CustomFieldInput
-                field={f}
-                value={cf[f.code]}
-                onChange={(v) => setCf((p) => ({ ...p, [f.code]: v }))}
-                orderId={order?.id}
-              />
-            </Field>
-          </div>
-        ))}
+          return layout.map((section, si) => (
+            <Fragment key={section.code}>
+              {layout.length > 1 && (
+                <div
+                  className={clsx(
+                    'sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400',
+                    si === 0 ? 'mb-1 mt-1' : 'mb-1 mt-6 border-t border-surface-border pt-4 dark:border-[#2a3140]',
+                  )}
+                >
+                  {lang === 'ru' ? section.name_ru : section.name_uz}
+                </div>
+              )}
+              {section.fields.map((lf) =>
+                lf.kind === 'system' ? (
+                  SYSTEM_RENDERERS[lf.field_ref]?.() ?? null
+                ) : lf.custom_field ? (
+                  <div key={lf.field_ref} className={lf.custom_field.type === 'text' ? 'sm:col-span-2' : ''}>
+                    <Field
+                      label={lang === 'ru' ? lf.custom_field.label_ru : lf.custom_field.label_uz}
+                      required={lf.custom_field.required_on_create}
+                      hint={lang === 'ru' ? lf.custom_field.hint_ru : lf.custom_field.hint_uz}
+                      error={err(`cf:${lf.custom_field.id}`)}
+                    >
+                      <CustomFieldInput
+                        field={lf.custom_field}
+                        value={cf[lf.custom_field.code]}
+                        onChange={(v) => setCf((p) => ({ ...p, [lf.custom_field!.code]: v }))}
+                        orderId={order?.id}
+                      />
+                    </Field>
+                  </div>
+                ) : null,
+              )}
+            </Fragment>
+          ))
+        })()}
       </div>
 
       {error && (

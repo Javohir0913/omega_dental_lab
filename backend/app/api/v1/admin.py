@@ -21,6 +21,7 @@ from app.models import (
     LogCategory,
     NotifyEvent,
     NotifyTemplate,
+    OrderFieldLayout,
     Recipient,
     RequirementMoment,
     Role,
@@ -172,6 +173,11 @@ async def delete_field(
         await db.execute(
             StageRequirement.__table__.delete().where(
                 StageRequirement.field_ref == f"cf:{field_id}"
+            )
+        )
+        await db.execute(
+            OrderFieldLayout.__table__.delete().where(
+                OrderFieldLayout.field_ref == f"cf:{field_id}"
             )
         )
         await db.delete(field)

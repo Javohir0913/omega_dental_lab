@@ -4,7 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Avatar } from '@/components/ui'
 import { useLang, useT } from '@/i18n'
 import { deadlineInfo } from '@/lib/format'
-import type { CustomField, OrderCard } from '@/lib/types'
+import type { CustomField, OrderCard, Stage } from '@/lib/types'
 
 export function CardBody({
   order,
@@ -12,18 +12,24 @@ export function CardBody({
   onClaim,
   fields,
   cfDefs,
+  prevStage,
+  onMoveBack,
 }: {
   order: OrderCard
   onOpen?: () => void
   onClaim?: () => void
   fields?: Record<string, boolean>
   cfDefs?: CustomField[]
+  prevStage?: Stage | null
+  onMoveBack?: () => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
   const dl = deadlineInfo(order.stage_deadline ?? order.deadline)
+  const projectDl = deadlineInfo(order.deadline)
   const show = (key: string) => fields?.[key] !== false
-  const hasBottom = show('responsible') || show('files') || show('deadline')
+  const hasBottom =
+    show('responsible') || show('files') || show('deadline') || show('project_deadline')
 
   function cfRawVal(code: string) {
     const val = (order as any).custom_fields?.[code]
@@ -37,6 +43,12 @@ export function CardBody({
     if (f.type === 'bool') return val ? t('yes') : t('no')
     if (f.type === 'select')
       return f.options?.find((o) => o.value === val)?.[lang === 'ru' ? 'label_ru' : 'label_uz'] ?? String(val)
+    if (f.type === 'multiselect' && Array.isArray(val)) {
+      if (val.length === 0) return <span className="text-ink-faint">—</span>
+      return val
+        .map((v) => f.options?.find((o) => o.value === v)?.[lang === 'ru' ? 'label_ru' : 'label_uz'] ?? String(v))
+        .join(', ')
+    }
     if (f.type === 'file') {
       const ids = Array.isArray(val) ? val : [val]
       return <span>📎 {ids.length}</span>
@@ -56,9 +68,24 @@ export function CardBody({
     >
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-[10px] text-ink-faint">{order.number}</span>
-        {show('priority') && order.priority < 300 && (
-          <span className="chip bg-amber-100 text-amber-700">↑</span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {show('priority') && order.priority < 300 && (
+            <span className="chip bg-amber-100 text-amber-700">↑</span>
+          )}
+          {prevStage && order.can_move && onMoveBack && (
+            <button
+              type="button"
+              title={t('move_back')}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveBack()
+              }}
+              className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38]"
+            >
+              ⏮
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-0.5 line-clamp-2 text-[13px] font-medium leading-snug">{order.title}</div>
@@ -97,6 +124,20 @@ export function CardBody({
         )
       )}
 
+      {show('project_deadline') && projectDl && (
+        <div className="mt-1 truncate text-[11px]">
+          <span className="text-ink-faint">📅 {t('cf_project_deadline')}: </span>
+          <span
+            className={clsx(
+              projectDl.overdue && 'font-medium text-rose-600',
+              projectDl.soon && !projectDl.overdue && 'text-amber-600',
+            )}
+          >
+            {projectDl.text}
+          </span>
+        </div>
+      )}
+
       {cfDefs?.map((f) => show(f.code) ? (
         <div key={f.code} className="mt-1 truncate text-[11px]">
           <span className="text-ink-faint">{lang === 'ru' ? f.label_ru : f.label_uz}: </span>
@@ -130,12 +171,16 @@ export function CardBody({
           ) : null}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px] text-ink-faint">
-            {show('files') && <span>📎{order.files_count}</span>}
+            {show('files') && order.unread_files_count > 0 && (
+              <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                📎{order.unread_files_count}
+              </span>
+            )}
             {show('deadline') && dl && (
               <span
                 className={clsx(
-                  dl.overdue && 'font-medium text-rose-600',
-                  dl.soon && !dl.overdue && 'text-amber-600',
+                  order.is_overdue && 'font-medium text-rose-600',
+                  dl.soon && !order.is_overdue && 'text-amber-600',
                 )}
               >
                 🕐 {dl.text}
@@ -155,12 +200,16 @@ export default function SortableCard({
   onClaim,
   fields,
   cfDefs,
+  prevStage,
+  onMoveBack,
 }: {
   order: OrderCard
   onOpen: () => void
   onClaim: () => void
   fields?: Record<string, boolean>
   cfDefs?: CustomField[]
+  prevStage?: Stage | null
+  onMoveBack?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: order.id,
@@ -176,7 +225,15 @@ export default function SortableCard({
       {...attributes}
       {...listeners}
     >
-      <CardBody order={order} onOpen={onOpen} onClaim={onClaim} fields={fields} cfDefs={cfDefs} />
+      <CardBody
+        order={order}
+        onOpen={onOpen}
+        onClaim={onClaim}
+        fields={fields}
+        cfDefs={cfDefs}
+        prevStage={prevStage}
+        onMoveBack={onMoveBack}
+      />
     </div>
   )
 }

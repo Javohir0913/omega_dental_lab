@@ -57,6 +57,7 @@ class OrderCard(ORMModel):
     files_count: int = 0
     has_3d_files: bool = False
     unread_messages: int = 0
+    unread_files_count: int = 0
     deleted_at: datetime | None = None
 
 

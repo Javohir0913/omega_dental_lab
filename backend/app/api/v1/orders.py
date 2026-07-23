@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import Text, and_, case, cast, func, or_, select
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
@@ -10,13 +10,19 @@ from app.models import (
     DEFAULT_SETTINGS,
     Chat,
     ChatMember,
+    CustomField,
+    CustomFieldValue,
+    Doctor,
+    FieldEntity,
     FileAsset,
     FileEntity,
     LogCategory,
     Message,
     NotifyEvent,
     Order,
+    OrderFileRead,
     OrderStageHistory,
+    Patient,
     Service,
     Stage,
     StageKind,
@@ -48,6 +54,32 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 # --------------------------------------------------------------------------
 # Yordamchilar
 # --------------------------------------------------------------------------
+
+
+def _apply_search(query, q: str):  # noqa: ANN001
+    """Nomi/raqami, bemor, shifokor, mas'ul, tavsif va qo'shimcha maydonlar bo'yicha qidiruv."""
+    like = f"%{q}%"
+    cf_match = (
+        select(CustomFieldValue.entity_id)
+        .join(CustomField, CustomFieldValue.field_id == CustomField.id)
+        .where(
+            CustomField.entity == FieldEntity.ORDER,
+            cast(CustomFieldValue.value["v"], Text).ilike(like),
+        )
+    )
+    return query.where(
+        or_(
+            Order.title.ilike(like),
+            Order.number.ilike(like),
+            Order.description.ilike(like),
+            Order.patient.has(or_(Patient.full_name.ilike(like), Patient.phone.ilike(like))),
+            Order.doctor.has(
+                or_(Doctor.full_name.ilike(like), Doctor.phone.ilike(like), Doctor.clinic.ilike(like))
+            ),
+            Order.responsible.has(User.full_name.ilike(like)),
+            Order.id.in_(cf_match),
+        )
+    )
 
 
 def _visibility_filter(query, user: User):  # noqa: ANN001
@@ -86,7 +118,11 @@ async def _get_order(db, order_id: int, user: User) -> Order:  # noqa: ANN001
 def _decorate(card: OrderCard, order: Order, user: User) -> OrderCard:
     now = now_utc()
     card.is_overdue = bool(
-        not order.is_closed and order.stage_deadline and order.stage_deadline < now
+        not order.is_closed
+        and (
+            (order.stage_deadline and order.stage_deadline < now)
+            or (order.deadline and order.deadline < now)
+        )
     )
     card.can_move = svc.can_move(user, order)
     card.can_claim = bool(
@@ -133,6 +169,45 @@ async def _order_unread_map(db, order_ids: list[int], user_id: int) -> dict[int,
     return out
 
 
+async def _order_unread_files_map(
+    db, order_ids: list[int], user_id: int, files_count: dict[int, int]  # noqa: ANN001
+) -> dict[int, int]:
+    """Har bir proyekt uchun foydalanuvchi hali ko'rmagan (yangi) fayllar soni.
+
+    Fayllar tabi hali umuman ochilmagan bo'lsa — umumiy son (birinchi tashrifda
+    hammasi "yangi"). Ochilgan bo'lsa — oxirgi ko'rilgandan keyin qo'shilganlar soni.
+    """
+    if not order_ids:
+        return {}
+    res = await db.execute(
+        select(OrderFileRead.order_id).where(
+            OrderFileRead.order_id.in_(order_ids), OrderFileRead.user_id == user_id
+        )
+    )
+    read_order_ids = {row[0] for row in res.all()}
+
+    res = await db.execute(
+        select(FileAsset.entity_id, func.count(FileAsset.id))
+        .join(
+            OrderFileRead,
+            and_(OrderFileRead.order_id == FileAsset.entity_id, OrderFileRead.user_id == user_id),
+        )
+        .where(
+            FileAsset.entity == FileEntity.ORDER,
+            FileAsset.entity_id.in_(order_ids),
+            FileAsset.deleted_at.is_(None),
+            FileAsset.created_at > OrderFileRead.last_read_at,
+        )
+        .group_by(FileAsset.entity_id)
+    )
+    new_since_read = dict(res.all())
+
+    return {
+        oid: new_since_read.get(oid, 0) if oid in read_order_ids else files_count.get(oid, 0)
+        for oid in order_ids
+    }
+
+
 async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noqa: ANN001
     if not orders:
         return []
@@ -170,6 +245,7 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         files_count[entity_id] = count
         has_3d_map[entity_id] = bool(has_3d)
     unread_map = await _order_unread_map(db, ids, user.id)
+    unread_files_map = await _order_unread_files_map(db, ids, user.id, files_count)
 
     out = []
     for o in orders:
@@ -178,6 +254,7 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         card.files_count = files_count.get(o.id, 0)
         card.has_3d_files = has_3d_map.get(o.id, False)
         card.unread_messages = unread_map.get(o.id, 0)
+        card.unread_files_count = unread_files_map.get(o.id, 0)
         out.append(_decorate(card, o, user))
     return out
 
@@ -213,8 +290,7 @@ async def kanban(
     base = select(Order).where(Order.deleted_at.is_(None))
     base = _visibility_filter(base, user)
     if q:
-        like = f"%{q}%"
-        base = base.where(or_(Order.title.ilike(like), Order.number.ilike(like)))
+        base = _apply_search(base, q)
     if responsible_id:
         base = base.where(Order.responsible_id == responsible_id)
     if doctor_id:
@@ -228,10 +304,13 @@ async def kanban(
     if only_free:
         base = base.where(Order.responsible_id.is_(None))
     if overdue:
+        now = now_utc()
         base = base.where(
             Order.is_closed.is_(False),
-            Order.stage_deadline.is_not(None),
-            Order.stage_deadline < now_utc(),
+            or_(
+                and_(Order.stage_deadline.is_not(None), Order.stage_deadline < now),
+                and_(Order.deadline.is_not(None), Order.deadline < now),
+            ),
         )
 
     columns: list[KanbanColumn] = []
@@ -283,8 +362,7 @@ async def list_orders(
 ):
     query = _visibility_filter(select(Order).where(Order.deleted_at.is_(None)), user)
     if q:
-        like = f"%{q}%"
-        query = query.where(or_(Order.title.ilike(like), Order.number.ilike(like)))
+        query = _apply_search(query, q)
     if stage_id:
         query = query.where(Order.stage_id.in_(stage_id))
     if responsible_id:
@@ -335,6 +413,8 @@ async def get_order(order_id: int, db: DbDep, user: CurrentUser):
         for f in files
     ]
     detail.files_count = len(files)
+    unread_files = await _order_unread_files_map(db, [order.id], user.id, {order.id: len(files)})
+    detail.unread_files_count = unread_files.get(order.id, 0)
     return detail
 
 
@@ -468,6 +548,12 @@ async def update_order(
     changes = {k: {"from": str(getattr(order, k)), "to": str(v)} for k, v in data.items()}
     for k, v in data.items():
         setattr(order, k, v)
+
+    # Dedlayn o'zgartirilsa — eski ogohlantirish belgisi bekor qilinadi, aks holda yangi
+    # (yaqinroq yoki uzoqroq) dedlayn o'tganda ham 24 soatlik "reminder_hours" cooldown
+    # eski bildirishnoma vaqtidan hisoblanib, yangi ogohlantirish jim yuborilmay qolardi.
+    if "deadline" in data:
+        order.deadline_overdue_notified_at = None
 
     if service_ids is not None:
         res = await db.execute(select(Service).where(Service.id.in_(service_ids)))
@@ -699,6 +785,30 @@ async def claim_order(order_id: int, request: Request, db: DbDep, user: CurrentU
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
     return _decorate(detail, order, user)
+
+
+@router.post("/{order_id}/files/read", response_model=Msg)
+async def mark_files_read(order_id: int, db: DbDep, user: CurrentUser):
+    """Fayllar tabini ochganda chaqiriladi — shu foydalanuvchi uchun "yangi fayl" hisoblagichini nolga tushiradi."""
+    order = await _get_order(db, order_id, user)
+    now = now_utc()
+
+    res = await db.execute(
+        select(OrderFileRead).where(
+            OrderFileRead.order_id == order.id, OrderFileRead.user_id == user.id
+        )
+    )
+    row = res.scalar_one_or_none()
+    if row is None:
+        db.add(OrderFileRead(order_id=order.id, user_id=user.id, last_read_at=now))
+    else:
+        row.last_read_at = now
+    await db.commit()
+
+    from app.realtime.hub import hub
+
+    await hub.publish(f"user:{user.id}", "order.files_read", {"order_id": order.id})
+    return Msg(detail="ok")
 
 
 @router.post("/{order_id}/assign", response_model=OrderDetail)

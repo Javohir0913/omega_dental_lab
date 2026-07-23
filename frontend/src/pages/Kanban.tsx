@@ -19,7 +19,7 @@ import { socket } from '@/lib/ws'
 import { useAuth } from '@/lib/auth'
 import { useLang, useNm, useT } from '@/i18n'
 import { toast } from '@/components/Toast'
-import { Spinner } from '@/components/ui'
+import { Modal, Spinner } from '@/components/ui'
 import SortableCard, { CardBody } from '@/components/OrderCardView'
 import MoveModal from '@/components/MoveModal'
 import OrderForm from '@/components/OrderForm'
@@ -150,6 +150,7 @@ export default function KanbanPage() {
     { key: 'services', label: t('cf_services') },
     { key: 'responsible', label: t('cf_responsible') },
     { key: 'deadline', label: t('cf_deadline') },
+    { key: 'project_deadline', label: t('cf_project_deadline') },
     { key: 'priority', label: t('cf_priority') },
     { key: 'files', label: t('cf_files') },
   ]
@@ -181,6 +182,20 @@ export default function KanbanPage() {
   const columns = workOnly ? allColumns.filter((c) => c.stage.kind === 'work') : allColumns
   const stages = useMemo(() => columns.map((c) => c.stage), [columns])
   const finalStages = useMemo(() => allColumns.filter((c) => c.stage.kind === 'success' || c.stage.kind === 'fail').map((c) => c.stage), [allColumns])
+  const orderedStages = useMemo(
+    () =>
+      allColumns
+        .map((c) => c.stage)
+        .filter((s) => s.kind !== 'success' && s.kind !== 'fail')
+        .sort((a, b) => a.sort - b.sort),
+    [allColumns],
+  )
+  function prevStageOf(order: OrderCard): Stage | null {
+    const idx = orderedStages.findIndex((s) => s.id === order.stage_id)
+    if (idx <= 0) return null
+    return orderedStages[idx - 1]
+  }
+  const [moveBack, setMoveBack] = useState<{ order: OrderCard; stage: Stage } | null>(null)
   const visibleColumns = useMemo(() => {
     if (!hideClosed) return columns
     return columns.map((col) => {
@@ -344,6 +359,11 @@ export default function KanbanPage() {
                       cfDefs={cardCustomFields}
                       onOpen={() => navigate(`/orders/${o.id}`)}
                       onClaim={() => claim(o)}
+                      prevStage={prevStageOf(o)}
+                      onMoveBack={() => {
+                        const stage = prevStageOf(o)
+                        if (stage) setMoveBack({ order: o, stage })
+                      }}
                     />
                   ))}
                 </SortableContext>
@@ -373,6 +393,34 @@ export default function KanbanPage() {
 
           <DragOverlay>{dragging && <div className="w-[262px] rotate-2"><CardBody order={dragging} fields={visibility} cfDefs={cardCustomFields} /></div>}</DragOverlay>
         </DndContext>
+      )}
+
+      {moveBack && (
+        <Modal
+          open
+          onClose={() => setMoveBack(null)}
+          title={t('move_back')}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setMoveBack(null)}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  await tryMove(moveBack.order, moveBack.stage)
+                  setMoveBack(null)
+                }}
+              >
+                {t('move_back')}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-soft">
+            {t('move_back_confirm')}: <strong>{nm(moveBack.stage, 'name')}</strong>?
+          </p>
+        </Modal>
       )}
 
       {move && (

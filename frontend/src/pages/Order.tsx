@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -16,10 +16,11 @@ import Model3DThumbnail from '@/components/Model3DThumbnail'
 import PhotoThumb from '@/components/PhotoThumb'
 import ToothChart from '@/components/ToothChart'
 import { useToothLabels } from '@/lib/useToothLabels'
-import { dt, duration, fileSize, fromNow } from '@/lib/format'
+import { dt, duration, fileSize, fromLocalInput, fromNow, toLocalInput } from '@/lib/format'
 import type {
   CustomField,
   Doctor,
+  LayoutSection,
   LogEntry,
   OrderDetail,
   OrderUpdatePayload,
@@ -43,6 +44,7 @@ export default function OrderPage() {
 
   const [tab, setTab] = useState('info')
   const [deleting, setDeleting] = useState(false)
+  const [showMoveBack, setShowMoveBack] = useState(false)
   const [move, setMove] = useState<{
     stage: Stage
     req?: RequirementError | null
@@ -115,6 +117,12 @@ export default function OrderPage() {
   const canEdit = can('order.edit') || can('order.rename')
   const showChatTab = !order.is_closed || order.unread_messages > 0 || tab === 'chat'
 
+  const orderedStages = stages
+    .filter((s) => s.kind !== 'success' && s.kind !== 'fail')
+    .sort((a, b) => a.sort - b.sort)
+  const prevStageIdx = orderedStages.findIndex((s) => s.id === order.stage_id)
+  const prevStage = prevStageIdx > 0 ? orderedStages[prevStageIdx - 1] : null
+
   async function saveInline(payload: OrderUpdatePayload) {
     try {
       await api.patch(`/orders/${orderId}`, payload)
@@ -186,14 +194,22 @@ export default function OrderPage() {
         items={[
           { value: 'info', label: t('order') },
           ...(showChatTab ? [{ value: 'chat', label: t('chat'), badge: order.unread_messages || undefined }] : []),
-          { value: 'files', label: t('files'), badge: order.files_count },
+          { value: 'files', label: t('files'), badge: order.unread_files_count || undefined },
           { value: 'history', label: t('history') },
           ...(can('log.order') ? [{ value: 'log', label: t('log') }] : []),
         ]}
       />
 
       <div className="mt-4">
-        {tab === 'info' && <InfoTab order={order} canEdit={canEdit} onSave={saveInline} />}
+        {tab === 'info' && (
+          <InfoTab
+            order={order}
+            canEdit={canEdit}
+            onSave={saveInline}
+            prevStage={prevStage}
+            onMoveBack={() => setShowMoveBack(true)}
+          />
+        )}
         {tab === 'chat' &&
           (order.chat_id ? (
             <div className="card h-[60vh] overflow-hidden">
@@ -227,6 +243,34 @@ export default function OrderPage() {
         onCancel={() => setDeleting(false)}
         onOk={remove}
       />
+
+      {showMoveBack && prevStage && (
+        <Modal
+          open
+          onClose={() => setShowMoveBack(false)}
+          title={t('move_back')}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setShowMoveBack(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  setShowMoveBack(false)
+                  await tryMove(prevStage)
+                }}
+              >
+                {t('move_back')}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-soft">
+            {t('move_back_confirm')}: <strong>{nm(prevStage, 'name')}</strong>?
+          </p>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -237,10 +281,14 @@ function InfoTab({
   order,
   canEdit,
   onSave,
+  prevStage,
+  onMoveBack,
 }: {
   order: OrderDetail
   canEdit: boolean
   onSave: (payload: OrderUpdatePayload) => Promise<void>
+  prevStage?: Stage | null
+  onMoveBack?: () => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
@@ -252,7 +300,7 @@ function InfoTab({
   const [doctorId, setDoctorId] = useState<number | null>(order.doctor?.id ?? null)
   const [serviceIds, setServiceIds] = useState<number[]>(order.services.map((s) => s.id))
   const [teeth, setTeeth] = useState<number[]>(order.teeth ?? [])
-  const [deadline, setDeadline] = useState(order.deadline ? order.deadline.slice(0, 16) : '')
+  const [deadline, setDeadline] = useState(toLocalInput(order.deadline))
   const [priority, setPriority] = useState(String(order.priority))
   const [description, setDescription] = useState(order.description ?? '')
   const [cf, setCf] = useState<Record<string, unknown>>({ ...order.custom_fields })
@@ -272,7 +320,7 @@ function InfoTab({
     setDoctorId(order.doctor?.id ?? null)
     setServiceIds(order.services.map((s) => s.id))
     setTeeth(order.teeth ?? [])
-    setDeadline(order.deadline ? order.deadline.slice(0, 16) : '')
+    setDeadline(toLocalInput(order.deadline))
     setPriority(String(order.priority))
     setDescription(order.description ?? '')
     setCf({ ...order.custom_fields })
@@ -281,7 +329,7 @@ function InfoTab({
     setSSearch('')
   }, [order])
 
-  const origDeadline = order.deadline ? order.deadline.slice(0, 16) : ''
+  const origDeadline = toLocalInput(order.deadline)
   const dirty =
     title !== order.title ||
     photoFileId !== (order.photo?.id ?? null) ||
@@ -303,7 +351,7 @@ function InfoTab({
     if (doctorId !== (order.doctor?.id ?? null)) payload.doctor_id = doctorId
     if (JSON.stringify(serviceIds) !== JSON.stringify(order.services.map((s) => s.id))) payload.service_ids = serviceIds
     if (JSON.stringify(teeth) !== JSON.stringify(order.teeth ?? [])) payload.teeth = teeth
-    if (deadline !== origDeadline) payload.deadline = deadline || null
+    if (deadline !== origDeadline) payload.deadline = fromLocalInput(deadline)
     if (priority !== String(order.priority)) payload.priority = Number(priority)
     if (description !== (order.description ?? '')) payload.description = description || null
     if (JSON.stringify(cf) !== JSON.stringify(order.custom_fields)) payload.custom_fields = cf
@@ -358,10 +406,9 @@ function InfoTab({
     }
   }
 
-  const { data: fields = [] } = useQuery({
-    queryKey: ['fields', 'order'],
-    queryFn: async () =>
-      (await api.get<CustomField[]>('/admin/fields', { params: { entity: 'order' } })).data,
+  const { data: layout = [] } = useQuery({
+    queryKey: ['order-layout'],
+    queryFn: async () => (await api.get<LayoutSection[]>('/order-layout')).data,
   })
 
   const { data: patients } = useQuery({
@@ -422,284 +469,316 @@ function InfoTab({
       <div className="card overflow-x-auto p-4 lg:col-span-2">
         <table className="w-full text-sm">
           <tbody>
-            {/* Title */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('order_title')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
-                ) : (
-                  order.title
-                )}
-              </td>
-            </tr>
-            {/* Proyekt rasmi */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">
-                {lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}
-              </td>
-              <td className="py-2">
-                {canEdit ? (
-                  <FileFieldInput
-                    value={photoFileId}
-                    onChange={(v) => setPhotoFileId(Array.isArray(v) ? (v[0] as number) ?? null : (v as number | null))}
-                    orderId={order.id}
-                    lang={lang}
-                    multiple={false}
-                  />
-                ) : order.photo ? (
-                  <PhotoThumb photo={order.photo} className="h-20 w-20 overflow-hidden rounded-lg" />
-                ) : (
-                  <span className="text-ink-faint">—</span>
-                )}
-              </td>
-            </tr>
-            {/* Patient */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('patient')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <SearchSelect
-                    items={patList.map((p) => ({ id: p.id, label: p.full_name, sub: p.phone ? `📞 ${p.phone}` : undefined }))}
-                    value={patientId}
-                    onChange={setPatientId}
-                    search={pSearch}
-                    onSearchChange={setPSearch}
-                    placeholder={t('search')}
-                  />
-                ) : (
-                  order.patient
-                    ? `${order.patient.full_name}${order.patient.phone ? ` · ${order.patient.phone}` : ''}`
-                    : '—'
-                )}
-              </td>
-            </tr>
-            {/* Doctor */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('doctor')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <SearchSelect
-                    items={docList.map((d) => ({ id: d.id, label: d.full_name, sub: d.clinic ? `🏥 ${d.clinic}` : undefined }))}
-                    value={doctorId}
-                    onChange={setDoctorId}
-                    search={dSearch}
-                    onSearchChange={setDSearch}
-                    placeholder={t('search')}
-                  />
-                ) : (
-                  order.doctor?.full_name ?? '—'
-                )}
-              </td>
-            </tr>
-            {/* Services — searchable multi-select dropdown */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('services')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <div className="relative">
-                    {selectedServices.length > 0 && (
-                      <div className="mb-1.5 flex flex-wrap gap-1.5">
-                        {selectedServices.map((s) => {
-                          const name = lang === 'ru' ? s.name_ru : s.name_uz
-                          return (
-                            <span key={s.id} className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 text-xs text-brand-700 dark:bg-brand-900/20 dark:text-brand-300">
-                              {name}
-                              <button
-                                className="ml-0.5 text-brand-400 hover:text-brand-600 dark:hover:text-brand-200"
-                                onClick={() => setServiceIds((prev) => prev.filter((id) => id !== s.id))}
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
-                    <input
-                      className="input w-full"
-                      value={sSearch}
-                      placeholder={selectedServices.length === 0 ? t('search') : ''}
-                      onFocus={() => setShowServices(true)}
-                      onChange={(e) => { setSSearch(e.target.value); setShowServices(true) }}
-                    />
-                    {showServices && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => { setShowServices(false); setSSearch('') }} />
-                        <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
-                          {svcList.map((s) => {
-                            const on = serviceIds.includes(s.id)
-                            const name = lang === 'ru' ? s.name_ru : s.name_uz
-                            return (
-                              <button
-                                key={s.id}
-                                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836] ${on ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
-                                onClick={() => setServiceIds((prev) => (on ? prev.filter((x) => x !== s.id) : [...prev, s.id]))}
-                              >
-                                <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[9px] ${on ? 'border-brand-500 bg-brand-500 text-white' : 'border-surface-border dark:border-[#2f3745]'}`}>
-                                  {on ? '✓' : ''}
-                                </span>
-                                <span className="truncate">{name}</span>
-                              </button>
-                            )
-                          })}
-                          {svcList.length === 0 && <div className="px-3 py-2 text-xs text-ink-faint">{t('empty')}</div>}
+            {(() => {
+              const inStageRow = (
+                <tr key="_in_stage" className="border-b border-surface-border dark:border-[#2a3140]">
+                  <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('in_stage')}</td>
+                  <td className="py-2">{order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}</td>
+                </tr>
+              )
+
+              const SYSTEM_ROW_RENDERERS: Record<string, () => React.ReactNode> = {
+                'sys:title': () => (
+                  <tr key="sys:title" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('order_title')}</td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+                      ) : (
+                        order.title
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:photo_file_id': () => (
+                  <tr key="sys:photo_file_id" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">
+                      {lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}
+                    </td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <FileFieldInput
+                          value={photoFileId}
+                          onChange={(v) => setPhotoFileId(Array.isArray(v) ? (v[0] as number) ?? null : (v as number | null))}
+                          orderId={order.id}
+                          lang={lang}
+                          multiple={false}
+                        />
+                      ) : order.photo ? (
+                        <PhotoThumb photo={order.photo} className="h-20 w-20 overflow-hidden rounded-lg" />
+                      ) : (
+                        <span className="text-ink-faint">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:patient_id': () => (
+                  <tr key="sys:patient_id" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('patient')}</td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <SearchSelect
+                          items={patList.map((p) => ({ id: p.id, label: p.full_name, sub: p.phone ? `📞 ${p.phone}` : undefined }))}
+                          value={patientId}
+                          onChange={setPatientId}
+                          search={pSearch}
+                          onSearchChange={setPSearch}
+                          placeholder={t('search')}
+                        />
+                      ) : (
+                        order.patient
+                          ? `${order.patient.full_name}${order.patient.phone ? ` · ${order.patient.phone}` : ''}`
+                          : '—'
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:doctor_id': () => (
+                  <tr key="sys:doctor_id" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('doctor')}</td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <SearchSelect
+                          items={docList.map((d) => ({ id: d.id, label: d.full_name, sub: d.clinic ? `🏥 ${d.clinic}` : undefined }))}
+                          value={doctorId}
+                          onChange={setDoctorId}
+                          search={dSearch}
+                          onSearchChange={setDSearch}
+                          placeholder={t('search')}
+                        />
+                      ) : (
+                        order.doctor?.full_name ?? '—'
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:services': () => (
+                  <tr key="sys:services" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('services')}</td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <div className="relative">
+                          {selectedServices.length > 0 && (
+                            <div className="mb-1.5 flex flex-wrap gap-1.5">
+                              {selectedServices.map((s) => {
+                                const name = lang === 'ru' ? s.name_ru : s.name_uz
+                                return (
+                                  <span key={s.id} className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-0.5 text-xs text-brand-700 dark:bg-brand-900/20 dark:text-brand-300">
+                                    {name}
+                                    <button
+                                      className="ml-0.5 text-brand-400 hover:text-brand-600 dark:hover:text-brand-200"
+                                      onClick={() => setServiceIds((prev) => prev.filter((id) => id !== s.id))}
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          )}
+                          <input
+                            className="input w-full"
+                            value={sSearch}
+                            placeholder={selectedServices.length === 0 ? t('search') : ''}
+                            onFocus={() => setShowServices(true)}
+                            onChange={(e) => { setSSearch(e.target.value); setShowServices(true) }}
+                          />
+                          {showServices && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => { setShowServices(false); setSSearch('') }} />
+                              <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+                                {svcList.map((s) => {
+                                  const on = serviceIds.includes(s.id)
+                                  const name = lang === 'ru' ? s.name_ru : s.name_uz
+                                  return (
+                                    <button
+                                      key={s.id}
+                                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836] ${on ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                                      onClick={() => setServiceIds((prev) => (on ? prev.filter((x) => x !== s.id) : [...prev, s.id]))}
+                                    >
+                                      <span className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[9px] ${on ? 'border-brand-500 bg-brand-500 text-white' : 'border-surface-border dark:border-[#2f3745]'}`}>
+                                        {on ? '✓' : ''}
+                                      </span>
+                                      <span className="truncate">{name}</span>
+                                    </button>
+                                  )
+                                })}
+                                {svcList.length === 0 && <div className="px-3 py-2 text-xs text-ink-faint">{t('empty')}</div>}
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </>
-                    )}
-                  </div>
-                ) : order.services.length ? (
-                  order.services.map((s) => (lang === 'ru' ? s.name_ru : s.name_uz)).join(', ')
-                ) : (
-                  '—'
-                )}
-              </td>
-            </tr>
-            {/* Teeth — to'liq qatorga cho'zilgan, chizma torayib qolmasin */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td colSpan={2} className="py-2">
-                <div className="mb-1.5 text-xs text-ink-faint">{t('teeth')}</div>
-                {canEdit ? (
-                  <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
-                ) : (order.teeth ?? []).length > 0 ? (
-                  (order.teeth ?? []).map((c) => toothLabels[String(c)] ?? String(c)).join(', ')
-                ) : (
-                  '—'
-                )}
-              </td>
-            </tr>
-            {/* Responsible */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('responsible')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <div className="relative" ref={assignRef}>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="flex flex-1 items-center gap-1.5 text-left text-sm"
-                        onClick={() => setShowAssign((v) => !v)}
-                      >
-                        {order.responsible ? (
-                          <span className="flex items-center gap-1.5">
+                      ) : order.services.length ? (
+                        order.services.map((s) => (lang === 'ru' ? s.name_ru : s.name_uz)).join(', ')
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:teeth': () => (
+                  <tr key="sys:teeth" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td colSpan={2} className="py-2">
+                      <div className="mb-1.5 text-xs text-ink-faint">{t('teeth')}</div>
+                      {canEdit ? (
+                        <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
+                      ) : (order.teeth ?? []).length > 0 ? (
+                        (order.teeth ?? []).map((c) => toothLabels[String(c)] ?? String(c)).join(', ')
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ),
+                'sys:responsible_id': () => (
+                  <Fragment key="sys:responsible_id">
+                    <tr className="border-b border-surface-border dark:border-[#2a3140]">
+                      <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('responsible')}</td>
+                      <td className="py-2">
+                        {canEdit ? (
+                          <div className="relative" ref={assignRef}>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="flex flex-1 items-center gap-1.5 text-left text-sm"
+                                onClick={() => setShowAssign((v) => !v)}
+                              >
+                                {order.responsible ? (
+                                  <span className="flex items-center gap-1.5">
+                                    <Avatar name={order.responsible.full_name} size={18} />
+                                    {order.responsible.full_name}
+                                  </span>
+                                ) : (
+                                  <span className="text-ink-faint">{t('free')}</span>
+                                )}
+                                <span className="text-[10px] text-ink-faint">▼</span>
+                              </button>
+                              {order.can_claim && !order.responsible && (
+                                <button
+                                  onClick={handleClaim}
+                                  className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600"
+                                >
+                                  {t('claim')}
+                                </button>
+                              )}
+                              {prevStage && order.can_move && onMoveBack && (
+                                <button
+                                  onClick={onMoveBack}
+                                  className="rounded-md border border-surface-border px-2 py-0.5 text-[10px] font-medium text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#242b38]"
+                                >
+                                  {t('move_back')}
+                                </button>
+                              )}
+                            </div>
+                            {showAssign && (
+                              <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+                                <button
+                                  className="w-full px-3 py-1.5 text-left text-xs text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836]"
+                                  onClick={() => handleAssign(null)}
+                                >
+                                  — {t('free')}
+                                </button>
+                                {assignableUsers.map((u) => (
+                                  <button
+                                    key={u.id}
+                                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836] ${order.responsible?.id === u.id ? 'bg-brand-50 font-medium dark:bg-brand-900/20' : ''}`}
+                                    onClick={() => handleAssign(u.id)}
+                                  >
+                                    <Avatar name={u.full_name} size={18} />
+                                    <span className="flex-1 truncate">{u.full_name}</span>
+                                    <span className="text-[10px] text-ink-faint">
+                                      {u.active_orders}
+                                    </span>
+                                  </button>
+                                ))}
+                                {assignableUsers.length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-ink-faint">{t('empty')}</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : order.responsible ? (
+                          <span className="inline-flex items-center gap-1.5">
                             <Avatar name={order.responsible.full_name} size={18} />
                             {order.responsible.full_name}
                           </span>
                         ) : (
                           <span className="text-ink-faint">{t('free')}</span>
                         )}
-                        <span className="text-[10px] text-ink-faint">▼</span>
-                      </button>
-                      {order.can_claim && !order.responsible && (
-                        <button
-                          onClick={handleClaim}
-                          className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600"
-                        >
-                          {t('claim')}
-                        </button>
-                      )}
-                    </div>
-                    {showAssign && (
-                      <div className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
-                        <button
-                          className="w-full px-3 py-1.5 text-left text-xs text-ink-faint hover:bg-surface-muted dark:hover:bg-[#222836]"
-                          onClick={() => handleAssign(null)}
-                        >
-                          — {t('free')}
-                        </button>
-                        {assignableUsers.map((u) => (
-                          <button
-                            key={u.id}
-                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-surface-muted dark:hover:bg-[#222836] ${order.responsible?.id === u.id ? 'bg-brand-50 font-medium dark:bg-brand-900/20' : ''}`}
-                            onClick={() => handleAssign(u.id)}
-                          >
-                            <Avatar name={u.full_name} size={18} />
-                            <span className="flex-1 truncate">{u.full_name}</span>
-                            <span className="text-[10px] text-ink-faint">
-                              {u.active_orders}
-                            </span>
-                          </button>
-                        ))}
-                        {assignableUsers.length === 0 && (
-                          <div className="px-3 py-2 text-xs text-ink-faint">{t('empty')}</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : order.responsible ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Avatar name={order.responsible.full_name} size={18} />
-                    {order.responsible.full_name}
-                  </span>
-                ) : (
-                  <span className="text-ink-faint">{t('free')}</span>
-                )}
-              </td>
-            </tr>
-            {/* Deadline */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('deadline')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <input type="datetime-local" className="input w-full max-w-[220px]" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-                ) : order.deadline ? (
-                  `${dt(order.deadline)} · ${fromNow(order.deadline)}`
-                ) : (
-                  '—'
-                )}
-              </td>
-            </tr>
-            {/* In stage — read-only */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('in_stage')}</td>
-              <td className="py-2">{order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}</td>
-            </tr>
-            {/* Priority */}
-            <tr className="border-b border-surface-border dark:border-[#2a3140]">
-              <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('priority')}</td>
-              <td className="py-2">
-                {canEdit ? (
-                  <input type="number" min={0} max={10} className="input w-20" value={priority} onChange={(e) => setPriority(e.target.value)} />
-                ) : (
-                  String(order.priority)
-                )}
-              </td>
-            </tr>
-            {/* Custom fields */}
-            {fields
-              .filter((f) => f.is_active)
-              .map((f) => {
-                const label = lang === 'ru' ? f.label_ru : f.label_uz
-                const val = cf[f.code]
-                return (
-                  <tr key={f.id} className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{label}</td>
+                      </td>
+                    </tr>
+                    {inStageRow}
+                  </Fragment>
+                ),
+                'sys:deadline': () => (
+                  <tr key="sys:deadline" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('deadline')}</td>
                     <td className="py-2">
-                      {f.type === 'file' ? (
-                        /* Fayl maydonini har doim interaktiv ko'rsatamiz */
-                        <CustomFieldInput
-                          field={f}
-                          value={val}
-                          onChange={canEdit ? (v) => {
-                            // Yangi qo'shilgan fayl ID larini kuzatib borish
-                            const prevIds = Array.isArray(val) ? val : val != null ? [val] : []
-                            const nextIds = Array.isArray(v) ? v : v != null ? [v] : []
-                            const added = nextIds.filter((x): x is number => typeof x === 'number' && !prevIds.includes(x))
-                            if (added.length > 0) {
-                              setTempUploadedFileIds((prev) => [...prev, ...added])
-                            }
-                            setCf((p) => ({ ...p, [f.code]: v }))
-                          } : () => {}}
-                          orderId={order.id}
-                        />
-                      ) : canEdit ? (
-                        <CustomFieldInput field={f} value={val} onChange={(v) => setCf((p) => ({ ...p, [f.code]: v }))} />
+                      {canEdit ? (
+                        <input type="datetime-local" className="input w-full max-w-[220px]" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+                      ) : order.deadline ? (
+                        `${dt(order.deadline)} · ${fromNow(order.deadline)}`
                       ) : (
-                        renderCfValue(f, val, lang, t)
+                        '—'
                       )}
                     </td>
                   </tr>
-                )
-              })}
+                ),
+                'sys:priority': () => (
+                  <tr key="sys:priority" className="border-b border-surface-border dark:border-[#2a3140]">
+                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('priority')}</td>
+                    <td className="py-2">
+                      {canEdit ? (
+                        <input type="number" min={0} max={10} className="input w-20" value={priority} onChange={(e) => setPriority(e.target.value)} />
+                      ) : (
+                        String(order.priority)
+                      )}
+                    </td>
+                  </tr>
+                ),
+              }
+
+              const hasResponsibleRow = layout.some((s) => s.fields.some((f) => f.field_ref === 'sys:responsible_id'))
+
+              return (
+                <>
+                  {layout.map((section, si) => (
+                    <Fragment key={section.code}>
+                      {layout.length > 1 && (
+                        <tr>
+                          <td
+                            colSpan={2}
+                            className={clsx(
+                              'pb-2 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400',
+                              si === 0 ? 'pt-0' : 'border-t border-surface-border pt-6 dark:border-[#2a3140]',
+                            )}
+                          >
+                            {lang === 'ru' ? section.name_ru : section.name_uz}
+                          </td>
+                        </tr>
+                      )}
+                      {section.fields.map((lf) =>
+                        lf.kind === 'system' ? (
+                          SYSTEM_ROW_RENDERERS[lf.field_ref]?.() ?? null
+                        ) : lf.custom_field ? (
+                          <CustomFieldRow
+                            key={lf.field_ref}
+                            field={lf.custom_field}
+                            value={cf[lf.custom_field.code]}
+                            canEdit={canEdit}
+                            orderId={order.id}
+                            lang={lang}
+                            t={t}
+                            onChange={(v) => setCf((p) => ({ ...p, [lf.custom_field!.code]: v }))}
+                            onFileAdded={(ids) => setTempUploadedFileIds((prev) => [...prev, ...ids])}
+                          />
+                        ) : null,
+                      )}
+                    </Fragment>
+                  ))}
+                  {!hasResponsibleRow && inStageRow}
+                </>
+              )
+            })()}
           </tbody>
         </table>
 
@@ -740,6 +819,57 @@ function InfoTab({
   )
 }
 
+function CustomFieldRow({
+  field: f,
+  value: val,
+  canEdit,
+  orderId,
+  lang,
+  t,
+  onChange,
+  onFileAdded,
+}: {
+  field: CustomField
+  value: unknown
+  canEdit: boolean
+  orderId: number
+  lang: string
+  t: (k: string) => string
+  onChange: (v: unknown) => void
+  onFileAdded: (ids: number[]) => void
+}) {
+  const label = lang === 'ru' ? f.label_ru : f.label_uz
+  return (
+    <tr className="border-b border-surface-border dark:border-[#2a3140]">
+      <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{label}</td>
+      <td className="py-2">
+        {f.type === 'file' ? (
+          /* Fayl maydonini har doim interaktiv ko'rsatamiz */
+          <CustomFieldInput
+            field={f}
+            value={val}
+            onChange={canEdit ? (v) => {
+              // Yangi qo'shilgan fayl ID larini kuzatib borish
+              const prevIds = Array.isArray(val) ? val : val != null ? [val] : []
+              const nextIds = Array.isArray(v) ? v : v != null ? [v] : []
+              const added = nextIds.filter((x): x is number => typeof x === 'number' && !prevIds.includes(x))
+              if (added.length > 0) {
+                onFileAdded(added)
+              }
+              onChange(v)
+            } : () => {}}
+            orderId={orderId}
+          />
+        ) : canEdit ? (
+          <CustomFieldInput field={f} value={val} onChange={onChange} />
+        ) : (
+          renderCfValue(f, val, lang, t)
+        )}
+      </td>
+    </tr>
+  )
+}
+
 function renderCfValue(f: CustomField, v: unknown, lang: string, t: (k: string) => string) {
   if (v == null || v === '') return <span className="text-ink-faint">—</span>
   if (f.type === 'bool') return v ? t('yes') : t('no')
@@ -757,6 +887,7 @@ const PREVIEW_MIME: Record<string, string> = {
   webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif',
   mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg',
   mp3: 'audio/mpeg', wav: 'audio/wav',
+  html: 'text/html', htm: 'text/html',
 }
 
 const MODEL3D_EXTS = ['stl', 'obj', 'ply']
@@ -785,6 +916,7 @@ function fileIcon(name: string, isImage: boolean): string {
   const ext = fileExt(name)
   if (MODEL3D_EXTS.includes(ext)) return '🧠'
   if (RAW_EXTS.includes(ext)) return '📷'
+  if (['html', 'htm'].includes(ext)) return '🌐'
   if (ext === 'pdf') return '📕'
   if (['doc', 'docx'].includes(ext)) return '📝'
   if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊'
@@ -849,6 +981,7 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
   const t = useT()
   const lang = useLang((s) => s.lang)
   const { can } = useAuth()
+  const qc = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
@@ -871,6 +1004,19 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
     enabled: isActive,
     staleTime: 5 * 60 * 1000,
   })
+
+  // Fayllar tabi ochilganda — shu foydalanuvchi uchun "yangi fayl" hisoblagichini nolga tushirish
+  useEffect(() => {
+    if (!isActive) return
+    api
+      .post(`/orders/${order.id}/files/read`)
+      .then(() => {
+        onChange()
+        qc.invalidateQueries({ queryKey: ['kanban'] })
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, order.id])
 
   // Lightbox shortcut'lari
   useEffect(() => {
@@ -914,6 +1060,7 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
     }
     setBusy(false)
     if (input.current) input.current.value = ''
+    await api.post(`/orders/${order.id}/files/read`).catch(() => {})
     onChange()
   }
 

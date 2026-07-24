@@ -164,6 +164,12 @@ async def update_me(body: ProfileUpdate, request: Request, db: DbDep, user: Curr
     data = body.model_dump(exclude_unset=True)
     if "lang" in data and data["lang"] not in ("ru", "uz"):
         data.pop("lang")
+    if "username" in data and data["username"] != user.username:
+        res = await db.execute(
+            select(User).where(User.username == data["username"], User.id != user.id)
+        )
+        if res.scalar_one_or_none() is not None:
+            raise HTTPException(409, "username_taken")
     for k, v in data.items():
         setattr(user, k, v)
     await log_activity(

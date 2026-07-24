@@ -196,7 +196,9 @@ function UserForm({
   const t = useT()
   const nm = useNm()
   const lang = useLang((s) => s.lang)
+  const { me } = useAuth()
   const edit = Boolean(user)
+  const usernameLocked = edit && user!.role.code === 'super_admin' && user!.id !== me?.id
 
   const [form, setForm] = useState({
     username: user?.username ?? '',
@@ -239,7 +241,8 @@ function UserForm({
     }
     try {
       if (edit) {
-        await api.patch(`/users/${user!.id}`, body)
+        const patchBody = usernameLocked ? body : { ...body, username: form.username.trim() }
+        await api.patch(`/users/${user!.id}`, patchBody)
       } else {
         await api.post('/users', { ...body, username: form.username.trim(), password: form.password })
       }
@@ -311,26 +314,36 @@ function UserForm({
           </select>
         </Field>
 
+        <Field
+          label={t('username')}
+          required
+          hint={
+            usernameLocked
+              ? lang === 'ru'
+                ? 'Логин супер администратора может менять только он сам'
+                : "Super administrator login'ini faqat o'zi o'zgartira oladi"
+              : null
+          }
+        >
+          <input
+            className="input"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            autoComplete="off"
+            disabled={usernameLocked}
+          />
+        </Field>
+
         {!edit && (
-          <>
-            <Field label={t('username')} required>
-              <input
-                className="input"
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
-                autoComplete="off"
-              />
-            </Field>
-            <Field label={t('password')} required hint="min. 5">
-              <input
-                type="text"
-                className="input"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                autoComplete="new-password"
-              />
-            </Field>
-          </>
+          <Field label={t('password')} required hint="min. 5">
+            <input
+              type="text"
+              className="input"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              autoComplete="new-password"
+            />
+          </Field>
         )}
 
         <Field label={t('phone')}>

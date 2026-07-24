@@ -113,6 +113,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
     full_name: str | None = None
     role_id: int | None = None
     phone: str | None = None
@@ -140,6 +141,7 @@ class PasswordChange(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9._-]+$")
     full_name: str | None = None
     phone: str | None = None
     lang: str | None = None

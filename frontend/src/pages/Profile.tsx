@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const qc = useQueryClient()
 
   const [fullName, setFullName] = useState(me?.full_name ?? '')
+  const [username, setUsername] = useState(me?.username ?? '')
   const [phone, setPhone] = useState(me?.phone ?? '')
   const [oldPwd, setOldPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
@@ -30,7 +31,11 @@ export default function ProfilePage() {
   async function saveProfile() {
     setBusy(true)
     try {
-      await api.patch('/auth/me', { full_name: fullName.trim(), phone: phone || null })
+      await api.patch('/auth/me', {
+        full_name: fullName.trim(),
+        username: username.trim(),
+        phone: phone || null,
+      })
       await load()
       toast(t('saved'))
     } catch (e) {
@@ -89,10 +94,22 @@ export default function ProfilePage() {
           <Field label={t('full_name')}>
             <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </Field>
+          <Field label={t('username')}>
+            <input
+              className="input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="off"
+            />
+          </Field>
           <Field label={t('phone')}>
             <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
-          <button className="btn-primary" onClick={saveProfile} disabled={busy || !fullName.trim()}>
+          <button
+            className="btn-primary"
+            onClick={saveProfile}
+            disabled={busy || !fullName.trim() || !username.trim()}
+          >
             {t('save')}
           </button>
         </div>

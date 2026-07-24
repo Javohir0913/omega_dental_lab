@@ -229,6 +229,17 @@ async def update_user(
     stage_ids = data.pop("stage_ids", None)
     service_ids = data.pop("service_ids", None)
 
+    if "username" in data and data["username"] != user.username:
+        # Super adminning login'ini hech kim (o'zi ham shu endpoint orqali emas, /auth/me
+        # orqali) o'zgartira olmaydi — boshqa super adminlar ham.
+        if user.is_super and user.id != actor.id:
+            raise HTTPException(403, "cannot_touch_super_admin")
+        res = await db.execute(
+            select(User).where(User.username == data["username"], User.id != user.id)
+        )
+        if res.scalar_one_or_none() is not None:
+            raise HTTPException(409, "username_taken")
+
     if "role_id" in data:
         res = await db.execute(select(Role).where(Role.id == data["role_id"]))
         role = res.scalar_one_or_none()

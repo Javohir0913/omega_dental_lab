@@ -12,6 +12,7 @@ type SettingsValues = {
   order_number_prefix?: string
   order_number_padding?: number
   company_name?: string
+  frontend_url?: string
   default_lang?: Lang
   kick_oldest_session?: boolean
   claim_enabled?: boolean
@@ -170,6 +171,15 @@ export default function AdminSettings() {
           className="input"
           value={form.company_name ?? ''}
           onChange={(e) => set('company_name', e.target.value)}
+        />
+      </Field>
+
+      <Field label={t('setting_frontend_url')} hint={t('setting_frontend_url_hint')}>
+        <input
+          className="input"
+          placeholder="https://lab.example.uz"
+          value={form.frontend_url ?? ''}
+          onChange={(e) => set('frontend_url', e.target.value)}
         />
       </Field>
 

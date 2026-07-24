@@ -169,6 +169,11 @@ export interface OrderCard {
   unread_messages: number
   unread_files_count: number
   deleted_at: string | null
+  is_paused: boolean
+  paused_at: string | null
+  pause_reason: string | null
+  paused_by: UserShort | null
+  can_resume: boolean
 }
 
 export interface OrderDetail extends OrderCard {

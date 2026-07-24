@@ -22,6 +22,7 @@ import { toast } from '@/components/Toast'
 import { Modal, Spinner } from '@/components/ui'
 import SortableCard, { CardBody } from '@/components/OrderCardView'
 import MoveModal from '@/components/MoveModal'
+import PauseModal from '@/components/PauseModal'
 import OrderForm from '@/components/OrderForm'
 import type { KanbanColumn, OrderCard, RequirementError, Stage, CustomField } from '@/lib/types'
 import { useCardFields } from '@/lib/useCardFields'
@@ -196,6 +197,8 @@ export default function KanbanPage() {
     return orderedStages[idx - 1]
   }
   const [moveBack, setMoveBack] = useState<{ order: OrderCard; stage: Stage } | null>(null)
+  const [pauseTarget, setPauseTarget] = useState<OrderCard | null>(null)
+  const [resumeTarget, setResumeTarget] = useState<OrderCard | null>(null)
   const visibleColumns = useMemo(() => {
     if (!hideClosed) return columns
     return columns.map((col) => {
@@ -245,6 +248,16 @@ export default function KanbanPage() {
       await api.post(`/orders/${order.id}/claim`)
       qc.invalidateQueries({ queryKey: ['kanban'] })
       toast(`${order.number} — ${t('claim')} ✓`)
+    } catch (err) {
+      toast(errText(err, lang), 'error')
+    }
+  }
+
+  async function resume(order: OrderCard) {
+    try {
+      await api.post(`/orders/${order.id}/resume`)
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      toast(`${order.number} — ${t('resume')} ✓`)
     } catch (err) {
       toast(errText(err, lang), 'error')
     }
@@ -364,6 +377,8 @@ export default function KanbanPage() {
                         const stage = prevStageOf(o)
                         if (stage) setMoveBack({ order: o, stage })
                       }}
+                      onPause={() => setPauseTarget(o)}
+                      onResume={() => setResumeTarget(o)}
                     />
                   ))}
                 </SortableContext>
@@ -420,6 +435,45 @@ export default function KanbanPage() {
           <p className="text-sm text-ink-soft">
             {t('move_back_confirm')}: <strong>{nm(moveBack.stage, 'name')}</strong>?
           </p>
+        </Modal>
+      )}
+
+      {pauseTarget && (
+        <PauseModal
+          order={pauseTarget}
+          onClose={() => setPauseTarget(null)}
+          onDone={() => qc.invalidateQueries({ queryKey: ['kanban'] })}
+        />
+      )}
+
+      {resumeTarget && (
+        <Modal
+          open
+          onClose={() => setResumeTarget(null)}
+          title={t('resume')}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setResumeTarget(null)}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  await resume(resumeTarget)
+                  setResumeTarget(null)
+                }}
+              >
+                {t('resume')}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-soft">{t('resume_confirm')}</p>
+          {resumeTarget.pause_reason && (
+            <p className="mt-2 text-xs text-ink-faint">
+              {t('pause_reason')}: {resumeTarget.pause_reason}
+            </p>
+          )}
         </Modal>
       )}
 

@@ -75,6 +75,20 @@ class Order(Base, TimestampMixin):
     # yopilish sababi (Провал bo'lganda)
     close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # ish jarayoni pauza qilingan bo'lsa — bosqich dedlayni muzlaydi
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pause_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paused_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    paused_by: Mapped["User | None"] = relationship(  # noqa: F821
+        lazy="selectin", foreign_keys=[paused_by_id]
+    )
+    # pauza qo'yilgan payt stage_deadline gacha qolgan sekundlar;
+    # davom etilganda shu qoldiqdan hisoblab dedlayn tiklanadi
+    stage_deadline_frozen_remaining_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # yumshoq o'chirish — 30 kun korzinkada turadi
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

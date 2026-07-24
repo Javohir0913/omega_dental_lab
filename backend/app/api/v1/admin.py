@@ -382,6 +382,8 @@ async def notify_meta(db: DbDep, _: Annotated[User, Depends(require("admin.notif
             {"key": "{doctor}", "label_ru": "Врач", "label_uz": "Vrach"},
             {"key": "{deadline}", "label_ru": "Дедлайн", "label_uz": "Dedlayn"},
             {"key": "{comment}", "label_ru": "Комментарий", "label_uz": "Izoh"},
+            {"key": "{reason}", "label_ru": "Причина паузы", "label_uz": "Pauza sababi"},
+            {"key": "{order_link}", "label_ru": "Ссылка на проект", "label_uz": "Proyektga havola"},
         ],
     )
 
@@ -398,6 +400,8 @@ _EVENT_LABELS: dict[str, tuple[str, str]] = {
     NotifyEvent.ORDER_OVERDUE: ("Просрочен дедлайн этапа", "Bosqich dedlayni kechikdi"),
     NotifyEvent.ORDER_DEADLINE_OVERDUE: ("Просрочен общий дедлайн проекта", "Proyektning umumiy dedlayni o'tdi"),
     NotifyEvent.ORDER_FILE: ("Загружен файл", "Fayl yuklandi"),
+    NotifyEvent.ORDER_PAUSED: ("Проект поставлен на паузу", "Proyekt pauza qilindi"),
+    NotifyEvent.ORDER_RESUMED: ("Проект возобновлён", "Proyekt davom ettirildi"),
     NotifyEvent.CHAT_MESSAGE: ("Новое сообщение в чате", "Chatda yangi xabar"),
 }
 

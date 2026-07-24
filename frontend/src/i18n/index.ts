@@ -26,6 +26,18 @@ export const dict: Dict = {
   required: { ru: 'Обязательно', uz: 'Majburiy' },
   move_back: { ru: 'Вернуть назад', uz: 'Orqaga qaytarish' },
   move_back_confirm: { ru: 'Вернуть карточку на этап', uz: 'Kartani quyidagi bosqichga qaytarasizmi' },
+  pause: { ru: 'Пауза', uz: 'Pauza' },
+  pause_reason: { ru: 'Причина паузы', uz: 'Pauza sababi' },
+  pause_reason_hint: {
+    ru: 'Укажите, почему работа приостанавливается — это увидят другие',
+    uz: "Nega ish to'xtatilayotganini yozing — buni boshqalar ham ko'radi",
+  },
+  pause_confirm: { ru: 'Поставить проект на паузу?', uz: 'Proyekt pauza qilinsinmi?' },
+  resume: { ru: 'Продолжить', uz: 'Davom ettirish' },
+  resume_confirm: { ru: 'Снять проект с паузы и продолжить работу?', uz: 'Proyekt pauzadan chiqarilib, davom ettirilsinmi?' },
+  paused_badge: { ru: 'На паузе', uz: 'Pauzada' },
+  paused_by_label: { ru: 'Поставил на паузу', uz: 'Pauza qildi' },
+  paused_since: { ru: 'С', uz: 'Vaqti' },
 
   // auth
   login: { ru: 'Вход', uz: 'Kirish' },
@@ -114,6 +126,11 @@ export const dict: Dict = {
   admin_settings: { ru: 'Общие настройки', uz: 'Umumiy sozlamalar' },
   admin_telegram: { ru: 'Telegram', uz: 'Telegram' },
   setting_company_name: { ru: 'Название компании', uz: 'Kompaniya nomi' },
+  setting_frontend_url: { ru: 'Адрес сайта', uz: 'Sayt manzili' },
+  setting_frontend_url_hint: {
+    ru: 'Используется для ссылки на проект в Telegram-уведомлениях, например https://lab.example.uz',
+    uz: "Telegram bildirishnomalarida proyektga havola uchun ishlatiladi, masalan https://lab.example.uz",
+  },
   setting_order_number_prefix: { ru: 'Префикс номера проекта', uz: 'Proyekt raqami prefiksi' },
   setting_order_number_padding: { ru: 'Цифр в номере', uz: 'Raqamdagi xonalar soni' },
   setting_default_lang: { ru: 'Язык по умолчанию', uz: 'Standart til' },

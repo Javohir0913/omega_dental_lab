@@ -260,6 +260,14 @@ async def move_to_stage(
     if from_stage.id == to_stage.id:
         return order
 
+    was_paused = order.is_paused
+    if was_paused:
+        order.is_paused = False
+        order.paused_at = None
+        order.pause_reason = None
+        order.paused_by_id = None
+        order.stage_deadline_frozen_remaining_sec = None
+
     await close_history(db, order, comment)
 
     order.stage_id = to_stage.id
@@ -299,13 +307,16 @@ async def move_to_stage(
         order_id=order.id,
         entity="order",
         entity_id=order.id,
-        message_ru=f"Этап: {from_stage.name_ru} → {to_stage.name_ru}",
-        message_uz=f"Bosqich: {from_stage.name_uz} → {to_stage.name_uz}",
+        message_ru=f"Этап: {from_stage.name_ru} → {to_stage.name_ru}"
+        + (" (снято с паузы)" if was_paused else ""),
+        message_uz=f"Bosqich: {from_stage.name_uz} → {to_stage.name_uz}"
+        + (" (pauzadan chiqarildi)" if was_paused else ""),
         meta={
             "from": {"id": from_stage.id, "name": from_stage.name_ru},
             "to": {"id": to_stage.id, "name": to_stage.name_ru},
             "responsible": order.responsible_id,
             "comment": comment,
+            "was_paused": was_paused,
         },
         request=request,
     )
@@ -315,6 +326,7 @@ async def move_to_stage(
         order,
         f"Этап: {from_stage.name_ru} → {to_stage.name_ru}"
         + (f" · {order.responsible.full_name}" if order.responsible else "")
+        + (" · снято с паузы" if was_paused else "")
         + (f"\n{comment}" if comment else ""),
         actor_id=actor.id,
     )
@@ -383,6 +395,99 @@ async def claim(db: AsyncSession, order: Order, user: User, request=None) -> Ord
         db, NotifyEvent.ORDER_CLAIMED, order=order, actor=user, stage_id=order.stage_id
     )
     await broadcast_order(order, "order.updated", {})
+    return order
+
+
+async def pause(
+    db: AsyncSession, order: Order, user: User, reason: str, request=None  # noqa: ANN001
+) -> Order:
+    """Ishni pauza qilish — sabab majburiy, bosqich dedlayni muzlaydi."""
+    if order.is_closed:
+        raise HTTPException(400, "order_closed")
+    if order.is_paused:
+        raise HTTPException(409, "already_paused")
+
+    now = now_utc()
+    if order.stage_deadline:
+        order.stage_deadline_frozen_remaining_sec = int(
+            (order.stage_deadline - now).total_seconds()
+        )
+        order.stage_deadline = None
+    else:
+        order.stage_deadline_frozen_remaining_sec = None
+
+    order.is_paused = True
+    order.paused_at = now
+    order.pause_reason = reason
+    order.paused_by_id = user.id
+    await db.flush()
+    await db.refresh(order, ["paused_by"])
+
+    await log_activity(
+        db,
+        action="order.paused",
+        category=LogCategory.ORDER,
+        actor=user,
+        order_id=order.id,
+        entity="order",
+        entity_id=order.id,
+        message_ru=f"Приостановлено на этапе {order.stage.name_ru}. Причина: {reason}",
+        message_uz=f"{order.stage.name_uz} bosqichida to'xtatildi. Sababi: {reason}",
+        meta={"stage_id": order.stage_id, "reason": reason},
+        request=request,
+    )
+    await system_message(
+        db, order, f"Пауза: {user.full_name} поставил проект на паузу — {reason}", actor_id=user.id
+    )
+    await notify_svc.notify(
+        db,
+        NotifyEvent.ORDER_PAUSED,
+        order=order,
+        actor=user,
+        stage_id=order.stage_id,
+        ctx={"reason": reason},
+    )
+    await broadcast_order(order, "order.paused", {})
+    return order
+
+
+async def resume(db: AsyncSession, order: Order, user: User, request=None) -> Order:  # noqa: ANN001
+    """Pauzadan chiqarish — faqat pauzani qo'ygan xodim yoki admin."""
+    if not order.is_paused:
+        raise HTTPException(409, "not_paused")
+    if not (user.is_super or user.id == order.paused_by_id):
+        raise HTTPException(403, "forbidden")
+
+    reason = order.pause_reason
+    now = now_utc()
+    if order.stage_deadline_frozen_remaining_sec is not None:
+        order.stage_deadline = now + timedelta(seconds=max(0, order.stage_deadline_frozen_remaining_sec))
+        order.stage_deadline_frozen_remaining_sec = None
+
+    order.is_paused = False
+    order.paused_at = None
+    order.pause_reason = None
+    order.paused_by_id = None
+    await db.flush()
+
+    await log_activity(
+        db,
+        action="order.resumed",
+        category=LogCategory.ORDER,
+        actor=user,
+        order_id=order.id,
+        entity="order",
+        entity_id=order.id,
+        message_ru=f"Возобновлено на этапе {order.stage.name_ru}",
+        message_uz=f"{order.stage.name_uz} bosqichida davom ettirildi",
+        meta={"stage_id": order.stage_id, "prev_reason": reason},
+        request=request,
+    )
+    await system_message(db, order, f"Возобновлено: {user.full_name} снял проект с паузы", actor_id=user.id)
+    await notify_svc.notify(
+        db, NotifyEvent.ORDER_RESUMED, order=order, actor=user, stage_id=order.stage_id
+    )
+    await broadcast_order(order, "order.resumed", {})
     return order
 
 

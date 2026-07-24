@@ -59,6 +59,11 @@ class OrderCard(ORMModel):
     unread_messages: int = 0
     unread_files_count: int = 0
     deleted_at: datetime | None = None
+    is_paused: bool = False
+    paused_at: datetime | None = None
+    pause_reason: str | None = None
+    paused_by: UserShort | None = None
+    can_resume: bool = False
 
 
 class OrderDetail(OrderCard):
@@ -128,6 +133,10 @@ class OrderMove(BaseModel):
 
 class OrderAssign(BaseModel):
     user_id: int | None = None
+
+
+class OrderPause(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class KanbanColumn(BaseModel):

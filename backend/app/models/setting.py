@@ -19,6 +19,10 @@ DEFAULT_SETTINGS: dict[str, tuple[dict, str]] = {
     "order_number_prefix": ({"v": "OM-"}, "Префикс номера проекта"),
     "order_number_padding": ({"v": 6}, "Кол-во цифр в номере проекта"),
     "company_name": ({"v": "OMEGA DENTAL LAB"}, "Название компании"),
+    "frontend_url": (
+        {"v": ""},
+        "Адрес сайта (для ссылки на проект в Telegram-уведомлениях), например https://lab.example.uz",
+    ),
     "default_lang": ({"v": "ru"}, "Язык по умолчанию"),
     "kick_oldest_session": (
         {"v": True},

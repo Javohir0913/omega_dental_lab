@@ -38,6 +38,7 @@ from app.schemas.order import (
     OrderCreate,
     OrderDetail,
     OrderMove,
+    OrderPause,
     OrderUpdate,
     StageHistoryOut,
 )
@@ -131,6 +132,9 @@ def _decorate(card: OrderCard, order: Order, user: User) -> OrderCard:
         and order.stage.allow_claim
         and (user.is_super or user.has_perm("order.claim"))
         and svc.can_user_work_stage(user, order.stage)
+    )
+    card.can_resume = bool(
+        order.is_paused and (user.is_super or user.id == order.paused_by_id)
     )
     if card.photo is not None:
         card.photo = card.photo.model_copy(update={"url": f"/api/v1/files/{card.photo.id}"})
@@ -766,6 +770,34 @@ async def move_order(
         comment=body.comment,
         request=request,
     )
+    await db.commit()
+    await db.refresh(order)
+
+    detail = OrderDetail.model_validate(order)
+    detail.custom_fields = await get_values(db, "order", order.id)
+    return _decorate(detail, order, user)
+
+
+@router.post("/{order_id}/pause", response_model=OrderDetail)
+async def pause_order(order_id: int, body: OrderPause, request: Request, db: DbDep, user: CurrentUser):
+    """Ishni pauza qilish — sababi majburiy, bosqich dedlayni to'xtaydi."""
+    order = await _get_order(db, order_id, user)
+    if not svc.can_move(user, order):
+        raise HTTPException(403, "forbidden")
+    await svc.pause(db, order, user, body.reason, request)
+    await db.commit()
+    await db.refresh(order)
+
+    detail = OrderDetail.model_validate(order)
+    detail.custom_fields = await get_values(db, "order", order.id)
+    return _decorate(detail, order, user)
+
+
+@router.post("/{order_id}/resume", response_model=OrderDetail)
+async def resume_order(order_id: int, request: Request, db: DbDep, user: CurrentUser):
+    """Pauzadan chiqarish — faqat pauzani qo'ygan xodim yoki admin."""
+    order = await _get_order(db, order_id, user)
+    await svc.resume(db, order, user, request)
     await db.commit()
     await db.refresh(order)
 

@@ -14,6 +14,8 @@ export function CardBody({
   cfDefs,
   prevStage,
   onMoveBack,
+  onPause,
+  onResume,
 }: {
   order: OrderCard
   onOpen?: () => void
@@ -22,6 +24,8 @@ export function CardBody({
   cfDefs?: CustomField[]
   prevStage?: Stage | null
   onMoveBack?: () => void
+  onPause?: () => void
+  onResume?: () => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
@@ -62,15 +66,53 @@ export function CardBody({
       onClick={onOpen}
       className={clsx(
         'card cursor-pointer p-2.5 transition-shadow hover:shadow-pop',
-        order.is_overdue && 'border-l-2 border-l-rose-400',
+        order.is_paused
+          ? 'border-l-2 border-l-slate-400 bg-slate-50 dark:bg-[#1c2028]'
+          : order.is_overdue && 'border-l-2 border-l-rose-400',
       )}
-      style={order.color ? { borderLeft: `3px solid ${order.color}` } : undefined}
+      style={order.color && !order.is_paused ? { borderLeft: `3px solid ${order.color}` } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-[10px] text-ink-faint">{order.number}</span>
         <div className="flex shrink-0 items-center gap-1">
           {show('priority') && order.priority < 300 && (
             <span className="chip bg-amber-100 text-amber-700">↑</span>
+          )}
+          {order.is_paused && onPause && !order.can_resume && (
+            <button
+              type="button"
+              title={order.pause_reason ?? t('pause')}
+              onClick={(e) => e.stopPropagation()}
+              className="chip cursor-default border border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            >
+              {t('paused_badge')}
+            </button>
+          )}
+          {order.is_paused && order.can_resume && onResume && (
+            <button
+              type="button"
+              title={order.pause_reason ?? t('pause')}
+              onClick={(e) => {
+                e.stopPropagation()
+                onResume()
+              }}
+              className="chip border border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              {t('resume')}
+            </button>
+          )}
+          {!order.is_paused && onPause && order.can_move && (
+            <button
+              type="button"
+              title={t('pause')}
+              onClick={(e) => {
+                e.stopPropagation()
+                onPause()
+              }}
+              className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38]"
+            >
+              {t('pause')}
+            </button>
           )}
           {prevStage && order.can_move && onMoveBack && (
             <button
@@ -89,6 +131,12 @@ export function CardBody({
       </div>
 
       <div className="mt-0.5 line-clamp-2 text-[13px] font-medium leading-snug">{order.title}</div>
+
+      {order.is_paused && order.pause_reason && (
+        <div className="mt-1 truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {t('pause_reason')}: {order.pause_reason}
+        </div>
+      )}
 
       {order.has_3d_files && (
         <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:border-sky-900/40 dark:bg-sky-900/20 dark:text-sky-300">
@@ -176,15 +224,21 @@ export function CardBody({
                 📎{order.unread_files_count}
               </span>
             )}
-            {show('deadline') && dl && (
-              <span
-                className={clsx(
-                  order.is_overdue && 'font-medium text-rose-600',
-                  dl.soon && !order.is_overdue && 'text-amber-600',
-                )}
-              >
-                🕐 {dl.text}
+            {show('deadline') && order.is_paused ? (
+              <span className="font-medium text-slate-500 dark:text-slate-400">
+                {t('paused_badge')}
               </span>
+            ) : (
+              show('deadline') && dl && (
+                <span
+                  className={clsx(
+                    order.is_overdue && 'font-medium text-rose-600',
+                    dl.soon && !order.is_overdue && 'text-amber-600',
+                  )}
+                >
+                  🕐 {dl.text}
+                </span>
+              )
             )}
           </div>
         </div>
@@ -202,6 +256,8 @@ export default function SortableCard({
   cfDefs,
   prevStage,
   onMoveBack,
+  onPause,
+  onResume,
 }: {
   order: OrderCard
   onOpen: () => void
@@ -210,6 +266,8 @@ export default function SortableCard({
   cfDefs?: CustomField[]
   prevStage?: Stage | null
   onMoveBack?: () => void
+  onPause?: () => void
+  onResume?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: order.id,
@@ -233,6 +291,8 @@ export default function SortableCard({
         cfDefs={cfDefs}
         prevStage={prevStage}
         onMoveBack={onMoveBack}
+        onPause={onPause}
+        onResume={onResume}
       />
     </div>
   )

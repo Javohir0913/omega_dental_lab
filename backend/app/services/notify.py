@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.realtime.hub import hub
 from app.services import telegram
+from app.services.settings_store import get_setting
 
 # Shablon yo'q bo'lsa ishlatiladigan zaxira matnlar: event -> (title_ru, title_uz, body_ru, body_uz)
 DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
@@ -77,6 +78,16 @@ DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
         "{actor} загрузил файл в проект «{order_title}»",
         "{actor} «{order_title}» proyektiga fayl yukladi",
     ),
+    NotifyEvent.ORDER_PAUSED: (
+        "{order_number}: приостановлен", "{order_number}: to'xtatildi",
+        "{actor} поставил «{order_title}» на паузу на этапе {stage}. Причина: {reason}",
+        "{actor} «{order_title}» ni {stage} bosqichida pauza qildi. Sababi: {reason}",
+    ),
+    NotifyEvent.ORDER_RESUMED: (
+        "{order_number}: возобновлён", "{order_number}: davom ettirildi",
+        "{actor} снял с паузы «{order_title}» на этапе {stage}",
+        "{actor} «{order_title}» ni {stage} bosqichida pauzadan chiqardi",
+    ),
     NotifyEvent.CHAT_MESSAGE: (
         "Сообщение от {actor}", "{actor} dan xabar",
         "{message}", "{message}",
@@ -95,6 +106,8 @@ DEFAULT_RECIPIENTS: dict[str, list[str]] = {
     NotifyEvent.ORDER_OVERDUE: [Recipient.RESPONSIBLE, "role:hr"],
     NotifyEvent.ORDER_DEADLINE_OVERDUE: ["role:admin", "role:super_admin"],
     NotifyEvent.ORDER_FILE: [Recipient.RESPONSIBLE],
+    NotifyEvent.ORDER_PAUSED: ["role:admin", "role:super_admin"],
+    NotifyEvent.ORDER_RESUMED: ["role:admin", "role:super_admin"],
     NotifyEvent.CHAT_MESSAGE: [],  # chat a'zolari alohida hisoblanadi
 }
 
@@ -228,6 +241,9 @@ async def notify(
         return []
 
     context = build_context(order, actor, ctx)
+    if order is not None:
+        base_url = (await get_setting(db, "frontend_url", "")).rstrip("/")
+        context.setdefault("order_link", f"{base_url}/orders/{order.id}" if base_url else "—")
     if link is None and order is not None:
         link = {"type": "order", "id": order.id}
 

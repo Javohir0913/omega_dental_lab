@@ -10,6 +10,7 @@ import { Avatar, Badge, Confirm, Empty, Field, Modal, SearchSelect, Spinner, Tab
 import { toast } from '@/components/Toast'
 import ChatPanel from '@/components/ChatPanel'
 import MoveModal from '@/components/MoveModal'
+import PauseModal from '@/components/PauseModal'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import Model3DViewer from '@/components/Model3DViewer'
 import Model3DThumbnail from '@/components/Model3DThumbnail'
@@ -45,6 +46,8 @@ export default function OrderPage() {
   const [tab, setTab] = useState('info')
   const [deleting, setDeleting] = useState(false)
   const [showMoveBack, setShowMoveBack] = useState(false)
+  const [showPause, setShowPause] = useState(false)
+  const [showResume, setShowResume] = useState(false)
   const [move, setMove] = useState<{
     stage: Stage
     req?: RequirementError | null
@@ -104,6 +107,17 @@ export default function OrderPage() {
     }
   }
 
+  async function resume() {
+    try {
+      await api.post(`/orders/${orderId}/resume`)
+      refresh()
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      toast(`${t('resume')} ✓`)
+    } catch (e) {
+      toast(errText(e, lang), 'error')
+    }
+  }
+
   async function remove() {
     try {
       await api.delete(`/orders/${orderId}`)
@@ -147,12 +161,23 @@ export default function OrderPage() {
             {order.stage && (
               <Badge color={order.stage.color}>{nm(order.stage, 'name')}</Badge>
             )}
-            {order.is_overdue && <Badge color="#e11d48">{t('overdue')}</Badge>}
+            {order.is_paused && <Badge color="#64748b">{t('paused_badge')}</Badge>}
+            {!order.is_paused && order.is_overdue && <Badge color="#e11d48">{t('overdue')}</Badge>}
           </div>
           <h1 className="mt-0.5 text-lg font-semibold leading-tight">{order.title}</h1>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {!order.is_closed && !order.is_paused && order.can_move && (
+            <button className="btn-ghost" onClick={() => setShowPause(true)}>
+              {t('pause')}
+            </button>
+          )}
+          {order.is_paused && order.can_resume && (
+            <button className="btn-ghost" onClick={() => setShowResume(true)}>
+              {t('resume')}
+            </button>
+          )}
           {can('order.delete') && (
             <button className="btn-ghost text-rose-600" onClick={() => setDeleting(true)}>
               {t('delete')}
@@ -160,6 +185,17 @@ export default function OrderPage() {
           )}
         </div>
       </div>
+
+      {order.is_paused && (
+        <div className="mb-4 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300">
+          <div className="font-medium">
+            {t('paused_badge')}
+            {order.paused_by && ` — ${t('paused_by_label')}: ${order.paused_by.full_name}`}
+            {order.paused_at && ` (${dt(order.paused_at)})`}
+          </div>
+          {order.pause_reason && <div className="mt-0.5">{t('pause_reason')}: {order.pause_reason}</div>}
+        </div>
+      )}
 
       {/* Bosqichlar chizig'i (Bitrix uslubida) */}
       {order.can_move && (
@@ -269,6 +305,45 @@ export default function OrderPage() {
           <p className="text-sm text-ink-soft">
             {t('move_back_confirm')}: <strong>{nm(prevStage, 'name')}</strong>?
           </p>
+        </Modal>
+      )}
+
+      {showPause && (
+        <PauseModal
+          order={order}
+          onClose={() => setShowPause(false)}
+          onDone={() => refresh()}
+        />
+      )}
+
+      {showResume && (
+        <Modal
+          open
+          onClose={() => setShowResume(false)}
+          title={t('resume')}
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setShowResume(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  setShowResume(false)
+                  await resume()
+                }}
+              >
+                {t('resume')}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-soft">{t('resume_confirm')}</p>
+          {order.pause_reason && (
+            <p className="mt-2 text-xs text-ink-faint">
+              {t('pause_reason')}: {order.pause_reason}
+            </p>
+          )}
         </Modal>
       )}
     </div>

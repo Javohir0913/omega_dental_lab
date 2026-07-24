@@ -19,12 +19,15 @@ class NotifyEvent:
     ORDER_OVERDUE = "order.overdue"  # joriy bosqich dedlayni o'tdi
     ORDER_DEADLINE_OVERDUE = "order.deadline_overdue"  # proyektning umumiy dedlayni o'tdi
     ORDER_FILE = "order.file"
+    ORDER_PAUSED = "order.paused"
+    ORDER_RESUMED = "order.resumed"
     CHAT_MESSAGE = "chat.message"
 
     ALL = [
         ORDER_CREATED, ORDER_STAGE_CHANGED, ORDER_ASSIGNED, ORDER_CLAIMED,
         ORDER_UNASSIGNED, ORDER_RENAMED, ORDER_SUCCESS, ORDER_FAIL,
-        ORDER_OVERDUE, ORDER_DEADLINE_OVERDUE, ORDER_FILE, CHAT_MESSAGE,
+        ORDER_OVERDUE, ORDER_DEADLINE_OVERDUE, ORDER_FILE,
+        ORDER_PAUSED, ORDER_RESUMED, CHAT_MESSAGE,
     ]
 
 

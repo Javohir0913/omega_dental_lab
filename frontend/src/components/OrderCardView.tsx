@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Avatar } from '@/components/ui'
+import PhotoThumb from '@/components/PhotoThumb'
 import { useLang, useT } from '@/i18n'
 import { deadlineInfo } from '@/lib/format'
 import type { CustomField, OrderCard, Stage } from '@/lib/types'
@@ -72,6 +73,14 @@ export function CardBody({
       )}
       style={order.color && !order.is_paused ? { borderLeft: `3px solid ${order.color}` } : undefined}
     >
+      {show('photo') && order.photo && (
+        <PhotoThumb
+          photo={order.photo}
+          fit="contain"
+          className="mb-2 h-28 w-full overflow-hidden rounded-md bg-surface-muted dark:bg-[#1e2533]"
+        />
+      )}
+
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-[10px] text-ink-faint">{order.number}</span>
         <div className="flex shrink-0 items-center gap-1">

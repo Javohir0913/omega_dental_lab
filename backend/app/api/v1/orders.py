@@ -286,6 +286,7 @@ async def kanban(
     only_mine: bool = False,
     only_free: bool = False,
     overdue: bool = False,
+    paused: bool = False,
     limit_per_column: int = Query(50, ge=5, le=200),
 ):
     """Kanban doskasi: ustunlar = bosqichlar, kartalar = proyektlar."""
@@ -316,6 +317,8 @@ async def kanban(
                 and_(Order.deadline.is_not(None), Order.deadline < now),
             ),
         )
+    if paused:
+        base = base.where(Order.is_paused.is_(True))
 
     columns: list[KanbanColumn] = []
     from app.schemas.catalog import StageOut
@@ -361,6 +364,7 @@ async def list_orders(
     patient_id: int | None = None,
     doctor_id: int | None = None,
     is_closed: bool | None = None,
+    paused: bool | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
@@ -377,6 +381,8 @@ async def list_orders(
         query = query.where(Order.doctor_id == doctor_id)
     if is_closed is not None:
         query = query.where(Order.is_closed.is_(is_closed))
+    if paused is not None:
+        query = query.where(Order.is_paused.is_(paused))
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
     res = await db.execute(
@@ -456,9 +462,10 @@ async def create_order(
         await svc.get_stage(db, body.stage_id) if body.stage_id else await svc.first_stage(db)
     )
 
+    number = await svc.next_number(db)
     order = Order(
-        number=await svc.next_number(db),
-        title=body.title,
+        number=number,
+        title=body.title.strip() or number,
         patient_id=body.patient_id,
         doctor_id=body.doctor_id,
         stage_id=stage.id,
@@ -541,6 +548,8 @@ async def update_order(
     data = body.model_dump(exclude_unset=True)
     service_ids = data.pop("service_ids", None)
     cf = data.pop("custom_fields", None)
+    if "title" in data:
+        data["title"] = data["title"].strip() or order.title
 
     # order.rename — faqat nom/vrach/patsent; boshqa maydonlar order.edit talab qiladi
     rename_only = {"title", "doctor_id", "patient_id"}

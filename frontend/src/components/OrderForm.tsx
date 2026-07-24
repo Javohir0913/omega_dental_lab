@@ -131,7 +131,7 @@ export default function OrderForm({
           <button className="btn-ghost" onClick={onClose} disabled={busy}>
             {t('cancel')}
           </button>
-          <button className="btn-primary" onClick={submit} disabled={busy || !title.trim()}>
+          <button className="btn-primary" onClick={submit} disabled={busy}>
             {busy ? t('loading') : edit ? t('save') : t('create')}
           </button>
         </>
@@ -142,7 +142,7 @@ export default function OrderForm({
           const SYSTEM_RENDERERS: Record<string, () => React.ReactNode> = {
             'sys:title': () => (
               <div className="sm:col-span-2" key="sys:title">
-                <Field label={t('order_title')} required error={err('sys:title')}>
+                <Field label={t('order_title')} error={err('sys:title')}>
                   <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
                 </Field>
               </div>

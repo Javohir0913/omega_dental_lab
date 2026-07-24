@@ -99,12 +99,14 @@ export default function KanbanPage() {
   const [onlyMine, setOnlyMineState] = useState(() => localStorage.getItem('omega_kanban_only_mine') === 'true')
   const [onlyFree, setOnlyFreeState] = useState(() => localStorage.getItem('omega_kanban_only_free') === 'true')
   const [overdue, setOverdueState] = useState(() => localStorage.getItem('omega_kanban_overdue') === 'true')
+  const [paused, setPausedState] = useState(() => localStorage.getItem('omega_kanban_paused') === 'true')
   const [workOnly, setWorkOnlyState] = useState(() => localStorage.getItem('omega_kanban_work_only') === 'true')
   const [hideClosed, setHideClosedState] = useState(() => localStorage.getItem('omega_kanban_hide_closed') === 'true')
 
   const setOnlyMine = (v: boolean) => { setOnlyMineState(v); localStorage.setItem('omega_kanban_only_mine', String(v)) }
   const setOnlyFree = (v: boolean) => { setOnlyFreeState(v); localStorage.setItem('omega_kanban_only_free', String(v)) }
   const setOverdue = (v: boolean) => { setOverdueState(v); localStorage.setItem('omega_kanban_overdue', String(v)) }
+  const setPaused = (v: boolean) => { setPausedState(v); localStorage.setItem('omega_kanban_paused', String(v)) }
   const setWorkOnly = (v: boolean) => { setWorkOnlyState(v); localStorage.setItem('omega_kanban_work_only', String(v)) }
   const setHideClosed = (v: boolean) => { setHideClosedState(v); localStorage.setItem('omega_kanban_hide_closed', String(v)) }
   const [dragging, setDragging] = useState<OrderCard | null>(null)
@@ -119,7 +121,7 @@ export default function KanbanPage() {
   const [showFields, setShowFields] = useState(false)
   const fieldsRef = useRef<HTMLDivElement>(null)
 
-  const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue }
+  const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue, paused }
 
   const { data, isLoading } = useQuery({
     queryKey: ['kanban', params],
@@ -146,6 +148,7 @@ export default function KanbanPage() {
   }, [showFields])
 
   const systemFieldDefs = [
+    { key: 'photo', label: lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi' },
     { key: 'patient', label: t('cf_patient') },
     { key: 'doctor', label: t('cf_doctor') },
     { key: 'services', label: t('cf_services') },
@@ -278,6 +281,7 @@ export default function KanbanPage() {
           { on: onlyMine, set: setOnlyMine, label: t('only_mine') },
           { on: onlyFree, set: setOnlyFree, label: t('only_free') },
           { on: overdue, set: setOverdue, label: t('overdue') },
+          { on: paused, set: setPaused, label: t('paused_badge') },
           { on: workOnly, set: setWorkOnly, label: lang === 'ru' ? 'В работе' : 'Ishda' },
           { on: hideClosed, set: setHideClosed, label: lang === 'ru' ? 'Скрыть закрытые' : 'Yopiqni yashirish' },
         ].map((f) => (

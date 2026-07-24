@@ -91,7 +91,7 @@ class StageHistoryOut(ORMModel):
 
 
 class OrderCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=160)
+    title: str = Field(default="", max_length=160)
     patient_id: int | None = None
     doctor_id: int | None = None
     service_ids: list[int] = []

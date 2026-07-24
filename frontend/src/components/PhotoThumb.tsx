@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { API_URL, tokens } from '@/lib/api'
 import type { FileOut } from '@/lib/types'
 
@@ -11,7 +12,15 @@ function fileExt(name: string) {
 // Proyekt rasmi — format qanday bo'lishidan qat'i nazar (jpg/png/heic/cr2/cr3)
 // ko'rsatishga harakat qiladi. HEIC serverda yuklashda JPEG'ga aylantiriladi,
 // CR2/CR3 uchun esa /preview endpoint orqali JPEG ko'rinishi olinadi.
-export default function PhotoThumb({ photo, className }: { photo: FileOut | null; className?: string }) {
+export default function PhotoThumb({
+  photo,
+  className,
+  fit = 'cover',
+}: {
+  photo: FileOut | null
+  className?: string
+  fit?: 'cover' | 'contain'
+}) {
   const [src, setSrc] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -51,7 +60,7 @@ export default function PhotoThumb({ photo, className }: { photo: FileOut | null
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-surface-border border-t-brand-500 dark:border-[#334155]" />
         </div>
       ) : (
-        <img src={src} alt="" className="h-full w-full object-cover" />
+        <img src={src} alt="" className={clsx('h-full w-full', fit === 'cover' ? 'object-cover' : 'object-contain')} />
       )}
     </div>
   )

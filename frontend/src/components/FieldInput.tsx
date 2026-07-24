@@ -4,20 +4,17 @@ import { api, API_URL, tokens } from '@/lib/api'
 import { useLang } from '@/i18n'
 import type { CustomField, FileOut, Page, User } from '@/lib/types'
 import Model3DViewer from '@/components/Model3DViewer'
+import { MODEL3D_EXTS, fileExt, isImageName, isRawName } from '@/lib/fileTypes'
 
 function fileUrl(f: FileOut): string {
   if (!f.url) return ''
   return f.url.startsWith('http') ? f.url : `${API_URL}${f.url}`
 }
 
-const MODEL3D_EXTS = ['stl', 'obj', 'ply']
-
-function fileExt(name: string) {
-  return name.split('.').pop()?.toLowerCase() ?? ''
-}
-
 async function openFileWithAuth(f: FileOut): Promise<string> {
-  const url = fileUrl(f)
+  // RAW (CR2/CR3/NEF/ARW/DNG) — brauzer ko'rsata olmaydi, serverdan JPEG preview olamiz.
+  const raw = isRawName(f.name)
+  const url = raw ? `${fileUrl(f)}/preview` : fileUrl(f)
   const r = await fetch(url, {
     headers: { Authorization: `Bearer ${tokens.access ?? ''}` },
   })
@@ -29,7 +26,7 @@ async function openFileWithAuth(f: FileOut): Promise<string> {
     webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp',
     pdf: 'application/pdf',
   }
-  const type = IMAGE_MIME[ext] || f.mime || blob.type || 'application/octet-stream'
+  const type = raw ? 'image/jpeg' : (IMAGE_MIME[ext] || f.mime || blob.type || 'application/octet-stream')
   return URL.createObjectURL(new Blob([blob], { type }))
 }
 
@@ -227,11 +224,8 @@ export function FileFieldInput({
 
   const allFiles = [...(existingFiles ?? []), ...localFiles.values()]
 
-  // Preview rasm fayllari
-  const IMAGE_EXTS_SET = new Set(['jpg','jpeg','png','gif','webp','bmp','svg'])
-  const previewImgFiles = allFiles.filter((f) =>
-    f.is_image || IMAGE_EXTS_SET.has(fileExt(f.name))
-  )
+  // Preview rasm fayllari (oddiy rasmlar + RAW preview)
+  const previewImgFiles = allFiles.filter((f) => isImageName(f.name, f.is_image) || isRawName(f.name))
 
   // ESC + Arrow keys
   useEffect(() => {
@@ -263,8 +257,8 @@ export function FileFieldInput({
   function canPreview(f: FileOut): boolean {
     const ext = fileExt(f.name)
     if (MODEL3D_EXTS.includes(ext)) return true
-    return f.is_image
-      || ['jpg','jpeg','png','gif','webp','bmp','svg'].includes(ext)
+    return isImageName(f.name, f.is_image)
+      || isRawName(f.name)
       || (f.mime != null && PREVIEW_TYPES.has(f.mime))
   }
 
@@ -277,8 +271,8 @@ export function FileFieldInput({
         setModel3d({ url: blobUrl, name: f.name })
         return
       }
-      // Rasm bo'lsa — gallery preview
-      if (f.is_image || IMAGE_EXTS_SET.has(ext)) {
+      // Rasm bo'lsa (yoki RAW preview) — gallery preview
+      if (isImageName(f.name, f.is_image) || isRawName(f.name)) {
         const imgIdx = previewImgFiles.findIndex((x) => x.id === f.id)
         const blobUrl = await openFileWithAuth(f)
         const blobUrls = previewImgFiles.map((_, i) => i === Math.max(imgIdx, 0) ? blobUrl : null)
@@ -383,8 +377,8 @@ export function FileFieldInput({
               key={f.id}
               className="flex items-center gap-1.5 rounded-md border border-surface-border bg-surface-muted px-2 py-1 text-xs dark:border-[#2f3745] dark:bg-[#222836]"
             >
-              {/* Thumbnail yoki ikon */}
-              {(f.is_image || ['jpg','jpeg','png','gif','webp','bmp'].includes(fileExt(f.name))) ? (
+              {/* Thumbnail yoki ikon (RAW ham serverdan preview bilan ko'rsatiladi) */}
+              {(isImageName(f.name, f.is_image) || isRawName(f.name)) ? (
                 <img
                   src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
                   alt=""

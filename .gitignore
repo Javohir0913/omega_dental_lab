@@ -10,6 +10,7 @@ uploads/*
 !uploads/.gitkeep
 .vscode/
 .idea/
+.claude/
 *.log
 .DS_Store
 *.tsbuildinfo

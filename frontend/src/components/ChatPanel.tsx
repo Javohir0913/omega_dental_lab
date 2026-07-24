@@ -11,6 +11,7 @@ import { fileSize, timeOnly, dateOnly } from '@/lib/format'
 import { clearOrderUnread, patchChatRead } from '@/lib/chatUpdates'
 import type { ChatItem, ChatMessage, FileAsset, UserShort } from '@/lib/types'
 import { API_URL, tokens } from '@/lib/api'
+import { isRawName } from '@/lib/fileTypes'
 
 export default function ChatPanel({
   chatId,
@@ -607,19 +608,25 @@ function MessageText({ text }: { text: string | null }) {
 
 function Attachment({ file, inverted }: { file: FileAsset; inverted?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
+  const raw = isRawName(file.name)
+  const showImage = file.is_image || raw
 
   useEffect(() => {
+    if (!showImage) return
     let revoked: string | null = null
-    if (!file.is_image) return
-    fetch(`${API_URL}${file.url}`, { headers: { Authorization: `Bearer ${tokens.access}` } })
-      .then((r) => r.blob())
+    let cancelled = false
+    // RAW (NEF/CR2/CR3...) — serverdan JPEG preview olamiz
+    const src = raw ? `${API_URL}${file.url}/preview` : `${API_URL}${file.url}`
+    fetch(src, { headers: { Authorization: `Bearer ${tokens.access}` } })
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob() })
       .then((b) => {
+        if (cancelled) return
         revoked = URL.createObjectURL(b)
         setUrl(revoked)
       })
       .catch(() => {})
-    return () => { if (revoked) URL.revokeObjectURL(revoked) }
-  }, [file])
+    return () => { cancelled = true; if (revoked) URL.revokeObjectURL(revoked) }
+  }, [file.id, file.url, raw, showImage])
 
   async function download() {
     const r = await fetch(`${API_URL}${file.url}`, { headers: { Authorization: `Bearer ${tokens.access}` } })
@@ -631,7 +638,7 @@ function Attachment({ file, inverted }: { file: FileAsset; inverted?: boolean })
     URL.revokeObjectURL(a.href)
   }
 
-  if (file.is_image && url) {
+  if (showImage && url) {
     return <img src={url} alt={file.name} onClick={download} className="max-h-52 cursor-pointer rounded-lg" />
   }
 

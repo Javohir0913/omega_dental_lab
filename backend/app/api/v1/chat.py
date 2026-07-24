@@ -39,8 +39,9 @@ async def _membership(db, chat_id: int, user: User) -> ChatMember:  # noqa: ANN0
     )
     member = res.scalar_one_or_none()
     if member is None:
-        # super admin istalgan proyekt chatini o'qiy oladi (nazorat uchun)
-        if user.is_super:
+        # super admin yoki "barcha chatlarni ko'rish" huquqi — istalgan chatni
+        # o'qiy oladi (nazorat uchun, adminkadan rolga beriladi)
+        if user.is_super or user.has_perm("chat.view.all"):
             res = await db.execute(select(Chat).where(Chat.id == chat_id))
             if res.scalar_one_or_none() is not None:
                 cm = ChatMember(chat_id=chat_id, user_id=user.id, joined_at=now_utc())

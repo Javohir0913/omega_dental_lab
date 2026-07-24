@@ -33,18 +33,27 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-surface-border bg-white shadow-card;
+    @apply rounded-xl border border-surface-border bg-white shadow-card transition-shadow duration-200;
   }
   html.dark .card {
-    @apply border-[#2a3140] bg-[#1a1f2a];
+    @apply border-[#272e3b] bg-[#1a1f2a];
+  }
+  /* Bosiladigan/interaktiv kartalar uchun yumshoq ko'tarilish */
+  .card-hover {
+    @apply hover:-translate-y-0.5 hover:shadow-lg hover:border-brand-200;
+  }
+  html.dark .card-hover {
+    @apply hover:border-[#38445a];
   }
 
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg px-3 py-1.5
-           text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2
+           text-sm font-medium transition-all duration-150 ease-out
+           active:scale-[.97] disabled:pointer-events-none disabled:opacity-50
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60;
   }
   .btn-primary {
-    @apply btn bg-brand-500 text-white hover:bg-brand-600;
+    @apply btn bg-brand-500 text-white shadow-sm hover:bg-brand-600 hover:shadow-md;
   }
   .btn-ghost {
     @apply btn border border-surface-border bg-white text-ink hover:bg-surface-muted;
@@ -53,16 +62,18 @@
     @apply border-[#2f3745] bg-[#1a1f2a] text-[#e6e9ee] hover:bg-[#222836];
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+    @apply btn bg-rose-600 text-white shadow-sm hover:bg-rose-700 hover:shadow-md;
   }
 
   .input {
-    @apply w-full rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm
-           outline-none transition-colors placeholder:text-ink-faint
-           focus:border-brand-400 focus:ring-2 focus:ring-brand-100;
+    @apply w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm
+           outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-ink-faint
+           focus:border-brand-400 focus:ring-2 focus:ring-brand-100
+           hover:border-brand-200;
   }
   html.dark .input {
-    @apply border-[#2f3745] bg-[#151a23] text-[#e6e9ee] focus:border-brand-500 focus:ring-brand-900/40;
+    @apply border-[#2f3745] bg-[#151a23] text-[#e6e9ee]
+           focus:border-brand-500 focus:ring-brand-900/40 hover:border-[#3a4353];
   }
 
   .label {

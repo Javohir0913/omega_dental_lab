@@ -33,7 +33,7 @@ export function Modal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/40 p-0 sm:items-start sm:p-4 sm:pt-[6vh]">
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-end justify-center overflow-y-auto bg-black/50 p-0 backdrop-blur-sm sm:items-start sm:p-4 sm:pt-[6vh]">
       <div
         className="absolute inset-0"
         onClick={onClose}
@@ -41,7 +41,7 @@ export function Modal({
       />
       <div
         className={clsx(
-          'card relative w-full max-h-[92dvh] rounded-b-none shadow-pop sm:max-h-none sm:rounded-xl',
+          'card relative w-full max-h-[92dvh] animate-scale-in rounded-b-none shadow-pop sm:max-h-none sm:rounded-2xl',
           wide ? 'max-w-4xl' : 'max-w-lg',
         )}
       >
@@ -286,7 +286,7 @@ export function Tabs({
         >
           {i.label}
           {i.badge != null && i.badge > 0 && (
-            <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-px text-[10px] text-brand-700">
+            <span className="ml-1.5 rounded-full bg-brand-100 px-1.5 py-px text-[10px] text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
               {i.badge}
             </span>
           )}

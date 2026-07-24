@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { API_URL, tokens } from '@/lib/api'
+import { isRawName } from '@/lib/fileTypes'
 import type { FileOut } from '@/lib/types'
 
-const RAW_EXTS = ['cr2', 'cr3']
-
-function fileExt(name: string) {
-  return name.split('.').pop()?.toLowerCase() ?? ''
-}
-
-// Proyekt rasmi — format qanday bo'lishidan qat'i nazar (jpg/png/heic/cr2/cr3)
+// Proyekt rasmi — format qanday bo'lishidan qat'i nazar (jpg/png/heic/cr2/cr3/nef/arw/dng)
 // ko'rsatishga harakat qiladi. HEIC serverda yuklashda JPEG'ga aylantiriladi,
-// CR2/CR3 uchun esa /preview endpoint orqali JPEG ko'rinishi olinadi.
+// RAW formatlar uchun esa /preview endpoint orqali JPEG ko'rinishi olinadi.
 export default function PhotoThumb({
   photo,
   className,
@@ -28,8 +23,7 @@ export default function PhotoThumb({
     if (!photo) return
     let revoked: string | null = null
     let cancelled = false
-    const ext = fileExt(photo.name)
-    const url = RAW_EXTS.includes(ext) ? `${API_URL}${photo.url}/preview` : `${API_URL}${photo.url}`
+    const url = isRawName(photo.name) ? `${API_URL}${photo.url}/preview` : `${API_URL}${photo.url}`
     fetch(url, { headers: { Authorization: `Bearer ${tokens.access ?? ''}` } })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)

@@ -34,6 +34,7 @@ PERMISSIONS: list[Perm] = [
     # --- Chat ---
     P("chat.order", "Чат", "Chat", "Чат проекта", "Proyekt chati"),
     P("chat.direct", "Чат", "Chat", "Личные сообщения", "Shaxsiy xabarlar"),
+    P("chat.view.all", "Чат", "Chat", "Видеть все чаты и вложения (без членства)", "Barcha chat va biriktirmalarni ko'rish (a'zoliksiz)"),
     # --- Fayl ---
     P("file.upload", "Файлы", "Fayllar", "Загружать файлы", "Fayl yuklash"),
     P("file.delete", "Файлы", "Fayllar", "Удалять файлы", "Fayl o'chirish"),
@@ -71,7 +72,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     "admin": [
         "order.view.all", "order.create", "order.edit", "order.rename", "order.delete",
         "order.move.any", "order.assign.any", "order.claim",
-        "chat.order", "chat.direct", "file.upload", "file.delete",
+        "chat.order", "chat.direct", "chat.view.all", "file.upload", "file.delete",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage",
         "service.view", "service.manage",
         "user.view", "user.manage", "user.password", "user.session",

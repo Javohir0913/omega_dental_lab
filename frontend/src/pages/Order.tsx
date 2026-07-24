@@ -18,6 +18,7 @@ import PhotoThumb from '@/components/PhotoThumb'
 import ToothChart from '@/components/ToothChart'
 import { useToothLabels } from '@/lib/useToothLabels'
 import { dt, duration, fileSize, fromLocalInput, fromNow, toLocalInput } from '@/lib/format'
+import { RAW_EXTS } from '@/lib/fileTypes'
 import type {
   CustomField,
   Doctor,
@@ -966,7 +967,6 @@ const PREVIEW_MIME: Record<string, string> = {
 }
 
 const MODEL3D_EXTS = ['stl', 'obj', 'ply']
-const RAW_EXTS = ['cr2', 'cr3']
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'heic', 'heif']
 
 type FileLike = { name: string; url: string }

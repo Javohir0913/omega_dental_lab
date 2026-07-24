@@ -33,7 +33,18 @@ except Exception:  # pragma: no cover - optional dependency
 from app.core.config import settings
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
-from app.models import FileAsset, FileEntity, LogCategory, NotifyEvent, Order, User
+from app.models import (
+    Chat,
+    ChatMember,
+    ChatType,
+    FileAsset,
+    FileEntity,
+    LogCategory,
+    Message,
+    NotifyEvent,
+    Order,
+    User,
+)
 from app.schemas.common import Msg
 from app.schemas.order import FileOut
 from app.services import orders as order_svc
@@ -67,7 +78,9 @@ BLOCKED_EXT = {
 }
 
 HEIC_EXTS = {".heic", ".heif"}
-RAW_EXTS = {".cr2", ".cr3"}
+# Kamera RAW formatlari — Canon (CR2/CR3), Nikon (NEF), Sony (ARW),
+# Adobe (DNG). rawpy/libraw bularning ichidan tayyor JPEG preview'ni oladi.
+RAW_EXTS = {".cr2", ".cr3", ".nef", ".arw", ".dng"}
 SAMPLE_ROOT = Path(__file__).resolve().parents[4] / "namuna"
 
 
@@ -103,21 +116,47 @@ def _raw_preview_path(abs_path: Path) -> Path:
 
 
 def _extract_raw_preview(abs_path: Path) -> bytes | None:
-    """CR2/CR3 faylning ichidagi tayyor JPEG preview'ini oladi (to'liq RAW dekodlamasdan)."""
-    if rawpy is None:
-        return None
-    try:
-        with rawpy.imread(str(abs_path)) as raw:
-            thumb = raw.extract_thumb()
-    except Exception:
-        return None
+    """RAW (CR2/CR3/NEF/ARW/DNG) fayldan brauzerda ko'rsatsa bo'ladigan JPEG oladi.
 
-    if thumb.format == rawpy.ThumbFormat.JPEG:
-        return thumb.data
-    if thumb.format == rawpy.ThumbFormat.BITMAP and Image is not None:
-        buf = io.BytesIO()
-        Image.fromarray(thumb.data).convert("RGB").save(buf, format="JPEG", quality=90)
-        return buf.getvalue()
+    Bir necha usulni ketma-ket sinaydi:
+      1. rawpy — RAW ichidagi tayyor JPEG thumbnail (tez, to'liq dekodlamasdan).
+      2. rawpy.postprocess — thumbnail bo'lmasa, RAW'ni to'liq dekodlab JPEG qiladi.
+      3. PIL — fayl aslida RAW bo'lmasa (masalan .NEF nomli JPEG/PNG/TIFF), to'g'ridan ochadi.
+    """
+    # 1 + 2: haqiqiy RAW fayl
+    if rawpy is not None:
+        try:
+            with rawpy.imread(str(abs_path)) as raw:
+                try:
+                    thumb = raw.extract_thumb()
+                except Exception:
+                    thumb = None
+                if thumb is not None:
+                    if thumb.format == rawpy.ThumbFormat.JPEG:
+                        return thumb.data
+                    if thumb.format == rawpy.ThumbFormat.BITMAP and Image is not None:
+                        buf = io.BytesIO()
+                        Image.fromarray(thumb.data).convert("RGB").save(buf, format="JPEG", quality=90)
+                        return buf.getvalue()
+                # Thumbnail yo'q — RAW'ni to'liq dekodlaymiz (kamdan-kam holat)
+                if Image is not None:
+                    rgb = raw.postprocess(use_camera_wb=True, no_auto_bright=False)
+                    buf = io.BytesIO()
+                    Image.fromarray(rgb).convert("RGB").save(buf, format="JPEG", quality=88)
+                    return buf.getvalue()
+        except Exception:
+            pass  # RAW emas ekan — pastdagi PIL fallback'ga o'tamiz
+
+    # 3: fayl aslida oddiy rasm (noto'g'ri kengaytmali JPEG/PNG/TIFF)
+    if Image is not None:
+        try:
+            with Image.open(abs_path) as image:
+                buf = io.BytesIO()
+                image.convert("RGB").save(buf, format="JPEG", quality=90)
+                return buf.getvalue()
+        except Exception:
+            pass
+
     return None
 
 
@@ -130,12 +169,10 @@ class ZipRequest(BaseModel):
     sample_paths: list[str] = []
 
 
-async def _can_view_order_file(db: AsyncSession, user: User, asset: FileAsset) -> bool:
-    if asset.entity != FileEntity.ORDER:
-        return True
+async def _can_view_order(db: AsyncSession, user: User, order_id: int) -> bool:
     if user.is_super or user.has_perm("order.view.all"):
         return True
-    res = await db.execute(select(Order).where(Order.id == asset.entity_id))
+    res = await db.execute(select(Order).where(Order.id == order_id))
     order = res.scalar_one_or_none()
     if order is None:
         return False
@@ -144,6 +181,48 @@ async def _can_view_order_file(db: AsyncSession, user: User, asset: FileAsset) -
         or order.created_by_id == user.id
         or any(s.id == order.stage_id for s in (user.stages or []))
     )
+
+
+async def _can_view_message_file(db: AsyncSession, user: User, message_id: int) -> bool:
+    """Chat/DM biriktirmasini faqat shu chat a'zosi (yoki tegishli proyektni
+    ko'ra oladigan foydalanuvchi) yuklab olishi mumkin."""
+    # Super admin yoki "barcha chatlarni ko'rish" huquqi (adminkadan rolga beriladi)
+    if user.is_super or user.has_perm("chat.view.all"):
+        return True
+    res = await db.execute(select(Message).where(Message.id == message_id))
+    msg = res.scalar_one_or_none()
+    if msg is None:
+        return False
+    # To'g'ridan-to'g'ri chat a'zoligi
+    res = await db.execute(
+        select(ChatMember.id).where(
+            ChatMember.chat_id == msg.chat_id, ChatMember.user_id == user.id
+        )
+    )
+    if res.scalar_one_or_none() is not None:
+        return True
+    res = await db.execute(select(Chat).where(Chat.id == msg.chat_id))
+    chat = res.scalar_one_or_none()
+    if chat is None:
+        return False
+    # Proyekt chati — proyektga kirish huquqi bo'lsa
+    if chat.order_id and await _can_view_order(db, user, chat.order_id):
+        return True
+    # DIRECT chat — faqat ikki ishtirokchisi
+    if chat.type == ChatType.DIRECT and chat.direct_key:
+        parts = chat.direct_key.split(":")
+        if len(parts) == 2 and str(user.id) in parts:
+            return True
+    return False
+
+
+async def _can_view_file(db: AsyncSession, user: User, asset: FileAsset) -> bool:
+    if asset.entity == FileEntity.ORDER:
+        return await _can_view_order(db, user, asset.entity_id)
+    if asset.entity == FileEntity.MESSAGE:
+        return await _can_view_message_file(db, user, asset.entity_id)
+    # PATIENT / USER (avatar, bemor rasmi) — tizimga kirgan har bir foydalanuvchi
+    return True
 
 
 def _unique_zip_name(name: str, used_names: set[str]) -> str:
@@ -287,6 +366,8 @@ async def file_info(file_id: int, db: DbDep, user: CurrentUser):
     asset = res.scalar_one_or_none()
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(404, "file_not_found")
+    if not await _can_view_file(db, user, asset):
+        raise HTTPException(403, "forbidden")
     return _to_out(asset)
 
 
@@ -304,14 +385,21 @@ async def reassign_file(
     asset = res.scalar_one_or_none()
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(404, "file_not_found")
+    # Manba faylni ko'ra olmaydigan foydalanuvchi uni ko'chira olmaydi
+    if not (user.is_super or asset.uploaded_by_id == user.id or await _can_view_file(db, user, asset)):
+        raise HTTPException(403, "forbidden")
     old = f"{asset.entity}:{asset.entity_id}"
-    asset.entity = entity
-    asset.entity_id = entity_id
+    asset.stage_id = None
     if entity == FileEntity.ORDER:
+        # Maqsad proyektga kirish huquqini tekshiramiz
+        if not await _can_view_order(db, user, entity_id):
+            raise HTTPException(403, "forbidden")
         res = await db.execute(select(Order).where(Order.id == entity_id))
         order = res.scalar_one_or_none()
         if order:
             asset.stage_id = order.stage_id
+    asset.entity = entity
+    asset.entity_id = entity_id
     await log_activity(
         db, action="file.reassigned", category=LogCategory.FILE, actor=user,
         entity="file", entity_id=asset.id,
@@ -338,7 +426,7 @@ async def download_zip(payload: ZipRequest, db: DbDep, user: CurrentUser):
                 asset = assets.get(file_id)
                 if asset is None or asset.deleted_at is not None:
                     continue
-                if not await _can_view_order_file(db, user, asset):
+                if not await _can_view_file(db, user, asset):
                     continue
                 abs_path = _upload_root() / asset.path
                 if not abs_path.exists():
@@ -392,12 +480,12 @@ async def sample_files(user: CurrentUser):
 
 @router.get("/{file_id}/preview")
 async def raw_preview(file_id: int, db: DbDep, user: CurrentUser):
-    """CR2/CR3 (Canon RAW) fayllar uchun — brauzerda ko'rsatsa bo'ladigan JPEG preview."""
+    """RAW (CR2/CR3/NEF/ARW/DNG) fayllar uchun — brauzerda ko'rsatsa bo'ladigan JPEG preview."""
     res = await db.execute(select(FileAsset).where(FileAsset.id == file_id))
     asset = res.scalar_one_or_none()
     if asset is None or asset.deleted_at is not None:
         raise HTTPException(404, "file_not_found")
-    if not await _can_view_order_file(db, user, asset):
+    if not await _can_view_file(db, user, asset):
         raise HTTPException(403, "forbidden")
 
     ext = Path(asset.name).suffix.lower()
@@ -426,7 +514,7 @@ async def download(file_id: int, db: DbDep, user: CurrentUser):
         raise HTTPException(404, "file_not_found")
 
     # proyekt fayli bo'lsa — proyektni ko'rish huquqi tekshiriladi
-    if not await _can_view_order_file(db, user, asset):
+    if not await _can_view_file(db, user, asset):
         raise HTTPException(403, "forbidden")
 
     abs_path = _upload_root() / asset.path

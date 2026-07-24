@@ -745,7 +745,10 @@ async def move_order(
     }
     for k, v in sys_fields.items():
         if k == "deadline" and isinstance(v, str):
-            v = datetime.fromisoformat(v)
+            try:
+                v = datetime.fromisoformat(v)
+            except ValueError:
+                raise HTTPException(422, "bad_deadline") from None
         setattr(order, k, v)
     if body.custom_fields:
         await set_values(db, "order", order.id, body.custom_fields)

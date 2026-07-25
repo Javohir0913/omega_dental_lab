@@ -123,19 +123,6 @@ export function CardBody({
               {t('pause')}
             </button>
           )}
-          {prevStage && order.can_move && onMoveBack && (
-            <button
-              type="button"
-              title={t('move_back')}
-              onClick={(e) => {
-                e.stopPropagation()
-                onMoveBack()
-              }}
-              className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38]"
-            >
-              ⏮
-            </button>
-          )}
         </div>
       </div>
 
@@ -202,30 +189,44 @@ export function CardBody({
         </div>
       ) : null)}
 
-      {hasBottom && (
+      {(hasBottom || (prevStage && order.can_move_back && onMoveBack)) && (
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-surface-border pt-2 dark:border-[#2a3140]">
-          {show('responsible') && order.responsible ? (
-            <div className="flex min-w-0 items-center gap-1.5">
-              <Avatar name={order.responsible.full_name} size={20} />
-              <span className="truncate text-[11px] text-ink-soft">
-                {order.responsible.full_name}
+          <div className="flex min-w-0 items-center gap-1.5">
+            {show('responsible') && order.responsible ? (
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Avatar name={order.responsible.full_name} size={20} />
+                <span className="truncate text-[11px] text-ink-soft">
+                  {order.responsible.full_name}
+                </span>
+              </div>
+            ) : show('responsible') && order.can_claim ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClaim?.()
+                }}
+                className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600"
+              >
+                {t('claim')}
+              </button>
+            ) : show('responsible') ? (
+              <span className="chip bg-surface-muted text-ink-faint dark:bg-[#242b38]">
+                {t('free')}
               </span>
-            </div>
-          ) : show('responsible') && order.can_claim ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onClaim?.()
-              }}
-              className="rounded-md bg-brand-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-brand-600"
-            >
-              {t('claim')}
-            </button>
-          ) : show('responsible') ? (
-            <span className="chip bg-surface-muted text-ink-faint dark:bg-[#242b38]">
-              {t('free')}
-            </span>
-          ) : null}
+            ) : null}
+            {prevStage && order.can_move_back && onMoveBack && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMoveBack()
+                }}
+                className="rounded-md border border-surface-border px-2 py-0.5 text-[10px] font-medium text-ink-soft hover:bg-surface-muted dark:border-[#2a3140] dark:hover:bg-[#242b38]"
+              >
+                {t('move_back')}
+              </button>
+            )}
+          </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 text-[10px] text-ink-faint">
             {show('files') && order.unread_files_count > 0 && (

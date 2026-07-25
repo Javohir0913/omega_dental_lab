@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
@@ -18,6 +18,7 @@ export default function ServicesPage() {
   const [creating, setCreating] = useState(false)
   const [del, setDel] = useState<ServiceItem | null>(null)
   const [showInactive, setShowInactive] = useState(false)
+  const [list, setList] = useState<ServiceItem[]>([])
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['services', showInactive],
@@ -25,6 +26,26 @@ export default function ServicesPage() {
       (await api.get<ServiceItem[]>('/services', { params: { include_inactive: showInactive } }))
         .data,
   })
+
+  useEffect(() => setList(data), [data])
+
+  /** Xizmatlar tartibini almashtirish (yuqori/past). Sort qiymatlari qayta hisoblanadi. */
+  async function shift(index: number, dir: -1 | 1) {
+    const next = [...list]
+    const target = index + dir
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setList(next)
+    try {
+      await api.post('/services/reorder', {
+        items: next.map((s, i) => ({ id: s.id, sort: (i + 1) * 100 })),
+      })
+      qc.invalidateQueries({ queryKey: ['services'] })
+    } catch (e) {
+      toast(errText(e, lang), 'error')
+      setList(data)
+    }
+  }
 
   async function remove() {
     if (!del) return
@@ -60,13 +81,14 @@ export default function ServicesPage() {
 
       {isLoading ? (
         <Spinner />
-      ) : data.length === 0 ? (
+      ) : list.length === 0 ? (
         <Empty />
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>
+                <th className="w-14" />
                 <th className="px-3 py-2 font-medium">Код</th>
                 <th className="px-3 py-2 font-medium">Название (RU)</th>
                 <th className="px-3 py-2 font-medium">Nomi (UZ)</th>
@@ -74,7 +96,7 @@ export default function ServicesPage() {
               </tr>
             </thead>
             <tbody>
-              {data.map((s) => (
+              {list.map((s, i) => (
                 <tr
                   key={s.id}
                   className={clsx(
@@ -82,6 +104,26 @@ export default function ServicesPage() {
                     !s.is_active && 'opacity-50',
                   )}
                 >
+                  <td className="px-3 py-1">
+                    {can('service.manage') && (
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => shift(i, -1)}
+                          disabled={i === 0}
+                          className="text-xs text-ink-faint hover:text-brand-600 disabled:opacity-20"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => shift(i, 1)}
+                          disabled={i === list.length - 1}
+                          className="text-xs text-ink-faint hover:text-brand-600 disabled:opacity-20"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-[11px] text-ink-faint">{s.code ?? '—'}</td>
                   <td className="px-3 py-2 font-medium">{s.name_ru}</td>
                   <td className="px-3 py-2 text-ink-soft">{s.name_uz}</td>

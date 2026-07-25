@@ -144,3 +144,9 @@ class ServiceUpdate(BaseModel):
     note: str | None = None
     sort: int | None = None
     is_active: bool | None = None
+
+
+class ServiceReorder(BaseModel):
+    """Xizmatlar tartibi: [{"id": 3, "sort": 100}, ...]"""
+
+    items: list[dict]

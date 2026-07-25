@@ -126,6 +126,9 @@ def _decorate(card: OrderCard, order: Order, user: User) -> OrderCard:
         )
     )
     card.can_move = svc.can_move(user, order)
+    card.can_move_back = bool(
+        not order.is_closed and not order.is_paused and svc.can_move_back(user, order)
+    )
     card.can_claim = bool(
         order.responsible_id is None
         and not order.is_closed
@@ -545,6 +548,15 @@ async def update_order(
     if not (user.is_super or user.has_perm("order.edit") or user.has_perm("order.rename")):
         raise HTTPException(403, "forbidden")
 
+    # Proyekt BOSHQA xodimga tayinlangan bo'lsa — alohida `order.edit.others` huquqi kerak
+    if (
+        not user.is_super
+        and order.responsible_id is not None
+        and order.responsible_id != user.id
+        and not user.has_perm("order.edit.others")
+    ):
+        raise HTTPException(403, "forbidden")
+
     data = body.model_dump(exclude_unset=True)
     service_ids = data.pop("service_ids", None)
     cf = data.pop("custom_fields", None)
@@ -686,7 +698,15 @@ async def move_order(
     """Kartani boshqa bosqichga surish (drag&drop yoki tugma)."""
     order = await _get_order(db, order_id, user)
 
-    if not svc.can_move(user, order):
+    to_stage = await svc.get_stage(db, body.stage_id)
+    if not to_stage.is_active:
+        raise HTTPException(400, "stage_inactive")
+
+    from_stage_id = order.stage_id
+    is_backward = to_stage.sort < order.stage.sort
+    allowed = svc.can_move_back(user, order) if is_backward else svc.can_move(user, order)
+
+    if not allowed:
         await log_activity(
             db, action="order.stage_changed", category=LogCategory.ORDER, is_success=False,
             actor=user, order_id=order.id,
@@ -695,12 +715,6 @@ async def move_order(
             request=request, commit=True,
         )
         raise HTTPException(403, "forbidden")
-
-    to_stage = await svc.get_stage(db, body.stage_id)
-    if not to_stage.is_active:
-        raise HTTPException(400, "stage_inactive")
-
-    from_stage_id = order.stage_id
 
     # Shu surishning o'zida kelgan qiymatlarni avval yozamiz —
     # majburiy maydon modali shu tarzda to'ldiradi.

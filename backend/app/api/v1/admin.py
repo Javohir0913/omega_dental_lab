@@ -366,6 +366,7 @@ async def notify_meta(db: DbDep, _: Annotated[User, Depends(require("admin.notif
             {"token": Recipient.STAGE_USERS, "label_ru": "Все техники этапа", "label_uz": "Bosqichning barcha texniklari"},
             {"token": Recipient.ORDER_PARTICIPANTS, "label_ru": "Все участники проекта", "label_uz": "Proyektning barcha ishtirokchilari"},
             {"token": Recipient.ACTOR, "label_ru": "Сам инициатор", "label_uz": "Harakat qilgan odam"},
+            {"token": Recipient.SKIPPED_STAGE_WORKERS, "label_ru": "Исполнители пропущенных этапов", "label_uz": "O'tkazib yuborilgan bosqichlar bajaruvchilari"},
             *[
                 {"token": f"role:{r.code}", "label_ru": f"Роль: {r.name_ru}", "label_uz": f"Rol: {r.name_uz}"}
                 for r in roles
@@ -402,6 +403,7 @@ _EVENT_LABELS: dict[str, tuple[str, str]] = {
     NotifyEvent.ORDER_FILE: ("Загружен файл", "Fayl yuklandi"),
     NotifyEvent.ORDER_PAUSED: ("Проект поставлен на паузу", "Proyekt pauza qilindi"),
     NotifyEvent.ORDER_RESUMED: ("Проект возобновлён", "Proyekt davom ettirildi"),
+    NotifyEvent.ORDER_MOVED_BACK: ("Проект возвращён на предыдущий этап", "Proyekt oldingi bosqichga qaytarildi"),
     NotifyEvent.CHAT_MESSAGE: ("Новое сообщение в чате", "Chatda yangi xabar"),
 }
 

@@ -53,6 +53,7 @@ class OrderCard(ORMModel):
     teeth: list[int] | None = None
     is_overdue: bool = False
     can_move: bool = False
+    can_move_back: bool = False
     can_claim: bool = False
     files_count: int = 0
     has_3d_files: bool = False

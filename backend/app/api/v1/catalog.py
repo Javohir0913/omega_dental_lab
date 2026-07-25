@@ -16,6 +16,7 @@ from app.schemas.catalog import (
     PatientUpdate,
     ServiceCreate,
     ServiceOut,
+    ServiceReorder,
     ServiceUpdate,
 )
 from app.schemas.common import Msg, Page
@@ -347,6 +348,30 @@ async def create_service(
     await db.commit()
     await db.refresh(service)
     return ServiceOut.model_validate(service)
+
+
+@services_router.post("/reorder", response_model=Msg)
+async def reorder_services(
+    body: ServiceReorder,
+    request: Request,
+    db: DbDep,
+    actor: Annotated[User, Depends(require("service.manage"))],
+):
+    res = await db.execute(select(Service))
+    services = {s.id: s for s in res.scalars().all()}
+
+    for item in body.items:
+        service = services.get(int(item.get("id", 0)))
+        if service is not None:
+            service.sort = int(item.get("sort", service.sort))
+
+    await log_activity(
+        db, action="service.reordered", category=LogCategory.CATALOG, actor=actor,
+        message_ru="Изменён порядок услуг", message_uz="Xizmatlar tartibi o'zgartirildi",
+        meta={"items": body.items}, request=request,
+    )
+    await db.commit()
+    return Msg(detail="reordered")
 
 
 @services_router.patch("/{service_id}", response_model=ServiceOut)

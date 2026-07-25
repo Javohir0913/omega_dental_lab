@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import now_utc
@@ -93,6 +93,29 @@ def can_move(user: User, order: Order) -> bool:
     return False
 
 
+def can_move_back(user: User, order: Order) -> bool:
+    """Orqaga qaytarish — joriy bosqichni bajara oladigan har qanday texnikka ochiq,
+    proyekt o'ziga tayinlangan bo'lishi shart emas. Lekin agar proyekt BOSHQA odamga
+    tayinlangan bo'lsa, alohida `order.move_back.others` huquqi kerak."""
+    if user.is_super or user.has_perm("order.move.any"):
+        return True
+    if not can_user_work_stage(user, order.stage):
+        return False
+    if order.responsible_id is not None and order.responsible_id != user.id:
+        return user.has_perm("order.move_back.others")
+    return True
+
+
+def can_edit(user: User, order: Order) -> bool:
+    """Proyekt maydonlarini tahrirlash. Agar boshqa odamga tayinlangan bo'lsa,
+    alohida `order.edit.others` huquqi kerak."""
+    if user.is_super or not user.has_perm("order.edit"):
+        return user.is_super
+    if order.responsible_id is not None and order.responsible_id != user.id:
+        return user.has_perm("order.edit.others")
+    return True
+
+
 # --------------------------------------------------------------------------
 # Marshrut tarixi
 # --------------------------------------------------------------------------
@@ -132,6 +155,48 @@ async def close_history(db: AsyncSession, order: Order, comment: str | None = No
     if comment:
         row.comment = comment
     await db.flush()
+
+
+async def last_responsible_at_stage(
+    db: AsyncSession, order: Order, stage_id: int
+) -> int | None:
+    """Orqaga qaytarilgan bosqichda oxirgi marta kim mas'ul bo'lganini qaytaradi."""
+    res = await db.execute(
+        select(OrderStageHistory.responsible_id)
+        .where(
+            OrderStageHistory.order_id == order.id,
+            OrderStageHistory.stage_id == stage_id,
+            OrderStageHistory.left_at.is_not(None),
+            OrderStageHistory.responsible_id.is_not(None),
+        )
+        .order_by(OrderStageHistory.left_at.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
+async def skipped_stage_workers(
+    db: AsyncSession, order: Order, from_stage: Stage, to_stage: Stage
+) -> list[int]:
+    """Orqaga qaytarilganda o'tib ketilgan bosqichlar (to_stage va from_stage oralig'i,
+    to_stage ham kiradi) da oxirgi marta kim mas'ul bo'lganini qaytaradi."""
+    res = await db.execute(
+        select(Stage.id).where(Stage.sort >= to_stage.sort, Stage.sort < from_stage.sort)
+    )
+    stage_ids = list(res.scalars().all())
+    if not stage_ids:
+        return []
+
+    res = await db.execute(
+        select(distinct(OrderStageHistory.responsible_id))
+        .where(
+            OrderStageHistory.order_id == order.id,
+            OrderStageHistory.stage_id.in_(stage_ids),
+            OrderStageHistory.left_at.is_not(None),
+            OrderStageHistory.responsible_id.is_not(None),
+        )
+    )
+    return [uid for uid in res.scalars().all() if uid]
 
 
 async def apply_stage_deadline(
@@ -268,6 +333,11 @@ async def move_to_stage(
         order.paused_by_id = None
         order.stage_deadline_frozen_remaining_sec = None
 
+    is_backward = to_stage.sort < from_stage.sort
+    skipped_ids = (
+        await skipped_stage_workers(db, order, from_stage, to_stage) if is_backward else []
+    )
+
     await close_history(db, order, comment)
 
     order.stage_id = to_stage.id
@@ -276,9 +346,13 @@ async def move_to_stage(
 
     # Yangi bosqich mas'uli:
     #  1) chaqiruvda aniq berilgan bo'lsa — o'sha
-    #  2) bo'lmasa — bo'sh (texnik «Olaman» tugmasi bilan oladi yoki HR biriktiradi)
+    #  2) orqaga qaytarilganda — o'sha bosqichda oxirgi marta kim mas'ul bo'lgan bo'lsa, o'sha
+    #     (odam qayta «Olaman» bosmasin, o'z ishini davom ettiraversin)
+    #  3) aks holda — bo'sh (texnik «Olaman» tugmasi bilan oladi yoki HR biriktiradi)
     if next_responsible_id:
         order.responsible_id = next_responsible_id
+    elif is_backward:
+        order.responsible_id = await last_responsible_at_stage(db, order, to_stage.id)
     else:
         order.responsible_id = None
 
@@ -351,6 +425,18 @@ async def move_to_stage(
         prev_responsible_id=prev_responsible_id,
         ctx={"stage_prev": from_stage.name_ru, "comment": comment or "—"},
     )
+
+    skipped_ids = [uid for uid in skipped_ids if uid != actor.id]
+    if is_backward and skipped_ids:
+        await notify_svc.notify(
+            db,
+            NotifyEvent.ORDER_MOVED_BACK,
+            order=order,
+            actor=actor,
+            stage_id=to_stage.id,
+            extra_user_ids=skipped_ids,
+            ctx={"stage_prev": from_stage.name_ru, "comment": comment or "—"},
+        )
 
     await broadcast_order(order, "order.moved", {"from_stage_id": from_stage.id})
     return order

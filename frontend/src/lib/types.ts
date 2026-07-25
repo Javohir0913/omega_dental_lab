@@ -163,6 +163,7 @@ export interface OrderCard {
   teeth: number[] | null
   is_overdue: boolean
   can_move: boolean
+  can_move_back: boolean
   can_claim: boolean
   files_count: number
   has_3d_files: boolean

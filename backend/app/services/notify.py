@@ -88,6 +88,11 @@ DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
         "{actor} снял с паузы «{order_title}» на этапе {stage}",
         "{actor} «{order_title}» ni {stage} bosqichida pauzadan chiqardi",
     ),
+    NotifyEvent.ORDER_MOVED_BACK: (
+        "{order_number}: возврат на этап {stage}", "{order_number}: {stage} bosqichiga qaytarildi",
+        "{actor} вернул «{order_title}» с этапа {stage_prev} на этап {stage} — ваша работа на этом этапе может потребовать проверки",
+        "{actor} «{order_title}» ni {stage_prev} dan {stage} bosqichiga qaytardi — bu bosqichdagi ishingiz qayta tekshirilishi mumkin",
+    ),
     NotifyEvent.CHAT_MESSAGE: (
         "Сообщение от {actor}", "{actor} dan xabar",
         "{message}", "{message}",
@@ -108,6 +113,7 @@ DEFAULT_RECIPIENTS: dict[str, list[str]] = {
     NotifyEvent.ORDER_FILE: [Recipient.RESPONSIBLE],
     NotifyEvent.ORDER_PAUSED: ["role:admin", "role:super_admin"],
     NotifyEvent.ORDER_RESUMED: ["role:admin", "role:super_admin"],
+    NotifyEvent.ORDER_MOVED_BACK: [Recipient.SKIPPED_STAGE_WORKERS],
     NotifyEvent.CHAT_MESSAGE: [],  # chat a'zolari alohida hisoblanadi
 }
 
@@ -150,6 +156,7 @@ async def resolve_recipients(
     stage_id: int | None = None,
     prev_responsible_id: int | None = None,
     extra_user_ids: list[int] | None = None,
+    skipped_responsible_ids: list[int] | None = None,
 ) -> set[int]:
     ids: set[int] = set(extra_user_ids or [])
 
@@ -181,6 +188,9 @@ async def resolve_recipients(
             )
             ids.update(res.scalars().all())
 
+        elif token == Recipient.SKIPPED_STAGE_WORKERS and skipped_responsible_ids:
+            ids.update(skipped_responsible_ids)
+
         elif token.startswith("role:"):
             code = token.split(":", 1)[1]
             res = await db.execute(
@@ -209,6 +219,7 @@ async def notify(
     stage_id: int | None = None,
     prev_responsible_id: int | None = None,
     extra_user_ids: list[int] | None = None,
+    skipped_responsible_ids: list[int] | None = None,
     ctx: dict | None = None,
     link: dict | None = None,
 ) -> list[Notification]:
@@ -234,6 +245,7 @@ async def notify(
         db, tokens,
         order=order, actor=actor, stage_id=stage_id,
         prev_responsible_id=prev_responsible_id, extra_user_ids=extra_user_ids,
+        skipped_responsible_ids=skipped_responsible_ids,
     )
     if actor and not notify_actor:
         user_ids.discard(actor.id)

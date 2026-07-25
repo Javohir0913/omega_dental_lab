@@ -21,13 +21,14 @@ class NotifyEvent:
     ORDER_FILE = "order.file"
     ORDER_PAUSED = "order.paused"
     ORDER_RESUMED = "order.resumed"
+    ORDER_MOVED_BACK = "order.moved_back"  # bosqich(lar) orqaga qaytarildi
     CHAT_MESSAGE = "chat.message"
 
     ALL = [
         ORDER_CREATED, ORDER_STAGE_CHANGED, ORDER_ASSIGNED, ORDER_CLAIMED,
         ORDER_UNASSIGNED, ORDER_RENAMED, ORDER_SUCCESS, ORDER_FAIL,
         ORDER_OVERDUE, ORDER_DEADLINE_OVERDUE, ORDER_FILE,
-        ORDER_PAUSED, ORDER_RESUMED, CHAT_MESSAGE,
+        ORDER_PAUSED, ORDER_RESUMED, ORDER_MOVED_BACK, CHAT_MESSAGE,
     ]
 
 
@@ -40,6 +41,7 @@ class Recipient:
     STAGE_USERS = "stage_users"            # shu bosqichni bajara oladigan hamma texnik
     ORDER_PARTICIPANTS = "participants"    # proyektda ishlagan hamma
     ACTOR = "actor"                        # harakatni qilgan odamning o'zi
+    SKIPPED_STAGE_WORKERS = "skipped_stage_workers"  # orqaga qaytarilganda o'tib ketilgan bosqichlarda ishlaganlar
     # "role:<code>" va "user:<id>" ham qo'llab-quvvatlanadi
 
 

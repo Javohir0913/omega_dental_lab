@@ -29,6 +29,8 @@ PERMISSIONS: list[Perm] = [
     P("order.delete", "Проекты", "Proyektlar", "Удалять проект", "Proyektni o'chirish"),
     P("order.move.any", "Проекты", "Proyektlar", "Двигать любой проект по этапам", "Istalgan proyektni surish"),
     P("order.move.own", "Проекты", "Proyektlar", "Двигать свои проекты", "O'z proyektini surish"),
+    P("order.move_back.others", "Проекты", "Proyektlar", "Возвращать назад чужие проекты", "Boshqaning proyektini orqaga qaytarish"),
+    P("order.edit.others", "Проекты", "Proyektlar", "Редактировать чужие проекты", "Boshqaning proyektini tahrirlash"),
     P("order.assign.any", "Проекты", "Proyektlar", "Назначать исполнителя другим", "Boshqaga mas'ul biriktirish"),
     P("order.claim", "Проекты", "Proyektlar", "Брать проект себе", "Proyektni o'ziga olish"),
     # --- Chat ---
@@ -71,7 +73,8 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     "super_admin": sorted(PERMISSION_CODES),
     "admin": [
         "order.view.all", "order.create", "order.edit", "order.rename", "order.delete",
-        "order.move.any", "order.assign.any", "order.claim",
+        "order.move.any", "order.move_back.others", "order.edit.others",
+        "order.assign.any", "order.claim",
         "chat.order", "chat.direct", "chat.view.all", "file.upload", "file.delete",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage",
         "service.view", "service.manage",
@@ -81,14 +84,16 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     ],
     "hr": [
         "order.view.all", "order.create", "order.edit", "order.rename",
-        "order.move.any", "order.assign.any",
+        "order.move.any", "order.move_back.others", "order.edit.others",
+        "order.assign.any",
         "chat.order", "chat.direct", "file.upload",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage", "service.view",
         "user.view", "user.manage", "user.password", "user.session",
         "log.order",
     ],
     "technician": [
-        "order.view.all", "order.move.own", "order.claim",
+        "order.view.all", "order.move.own", "order.move_back.others", "order.edit.others",
+        "order.claim",
         "chat.order", "chat.direct", "file.upload",
         "patient.view", "doctor.view", "service.view",
         "log.order",

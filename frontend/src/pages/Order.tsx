@@ -736,7 +736,7 @@ function InfoTab({
                                   {t('claim')}
                                 </button>
                               )}
-                              {prevStage && order.can_move && onMoveBack && (
+                              {prevStage && order.can_move_back && onMoveBack && (
                                 <button
                                   onClick={onMoveBack}
                                   className="rounded-md border border-surface-border px-2 py-0.5 text-[10px] font-medium text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#242b38]"

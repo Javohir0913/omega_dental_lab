@@ -15,12 +15,26 @@ interface Props {
 // Yorug'lik manbalarining boshlang'ich (100%) intensivligi — slider shu qiymatlarni ko'paytiradi
 const BASE_LIGHT = { hemi: 1.1, ambient: 0.55, head: 1.1, fill: 0.35 }
 
+// Kameraning ko'rish burchagi (Field of View) — daraja hisobida.
+// Kamera JOYIDAN qimirlamaydi — faqat camera.fov o'zgaradi (linza fokus masofasi kabi).
+//   FOV = 1°  → telephoto: burchak juda tor, ob'ekt juda yaqin/zoomed-in, perspektiva tekis.
+//   FOV = 90° → wide-angle: burchak keng, atrof panorama bo'lib ochiladi (zoomed-out).
+// Kichik FOV'da orqa tishlar (18·28·38·48) old tishlar (6·7) ortidan tekis ko'rinadi.
+const DEFAULT_FOV = 45
+const MIN_FOV = 1
+const MAX_FOV = 90
+
 export default function Model3DViewer({ url, name, onClose, onDownload }: Props) {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   const canvasRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lightMult, setLightMult] = useState(1)
+  const [fov, setFov] = useState(DEFAULT_FOV)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const controlsRef = useRef<OrbitControls | null>(null)
+  // Oxirgi FOV — exocad kabi masofa kompensatsiyasini bosqichma-bosqich hisoblash uchun
+  const prevFovRef = useRef(DEFAULT_FOV)
   const lightsRef = useRef<{
     hemi: THREE.HemisphereLight
     ambient: THREE.AmbientLight
@@ -42,15 +56,23 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
     let animId = 0
     let cleanup = () => {}
 
+    // Yangi model yuklanganda holatni tiklaymiz (spinner ko'rinadi, FOV effekti qayta ishga tushadi)
+    setLoading(true)
+    setError(null)
+
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x0f172a)
 
     const w = container.clientWidth
     const h = container.clientHeight
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 10000)
+    const camera = new THREE.PerspectiveCamera(DEFAULT_FOV, w / h, 0.01, 1_000_000)
     camera.position.set(0, 80, 200)
+    cameraRef.current = camera
+    prevFovRef.current = DEFAULT_FOV
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+    // logarithmicDepthBuffer — kichik FOV'da (1°–5°) kamera juda uzoqda bo'lganda ham
+    // chuqurlik aniqligini saqlaydi, ya'ni sirtlar bir-biriga urishmaydi (z-fighting yo'q).
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', logarithmicDepthBuffer: true })
     renderer.setSize(w, h)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3))
     renderer.shadowMap.enabled = false
@@ -78,6 +100,7 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.06
+    controlsRef.current = controls
 
     const addGeometry = (geometry: THREE.BufferGeometry) => {
       geometry.computeVertexNormals()
@@ -111,6 +134,10 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
       camera.position.set(0, maxDim * scale * 0.6, maxDim * scale * 1.45)
       controls.target.set(0, 0, 0)
       controls.update()
+      // Kamera DEFAULT_FOV bo'yicha kadrga solindi — kompensatsiya shu nuqtadan boshlanadi
+      camera.fov = DEFAULT_FOV
+      camera.updateProjectionMatrix()
+      prevFovRef.current = DEFAULT_FOV
       setLoading(false)
     }
 
@@ -153,6 +180,10 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
               camera.position.set(0, 60, 150)
               controls.target.set(0, 0, 0)
               controls.update()
+              // Kamera DEFAULT_FOV bo'yicha kadrga solindi — kompensatsiya shu nuqtadan boshlanadi
+              camera.fov = DEFAULT_FOV
+              camera.updateProjectionMatrix()
+              prevFovRef.current = DEFAULT_FOV
               setLoading(false)
             },
             undefined,
@@ -205,6 +236,8 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
       controls.dispose()
       renderer.dispose()
       lightsRef.current = null
+      cameraRef.current = null
+      controlsRef.current = null
       try {
         renderer.domElement.remove()
       } catch {
@@ -224,6 +257,28 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
     l.head.intensity = BASE_LIGHT.head * lightMult
     l.fill.intensity = BASE_LIGHT.fill * lightMult
   }, [lightMult, loading])
+
+  // FOV slaydери — exocad uslubida: FOV o'zgarganda kamerani model o'lchami ekranда
+  // o'zgarmaydigan qilib masofasini ham moslaydi (masofa ∝ 1/tan(fov/2)).
+  // Shunda faqat PERSPEKTIVA o'zgaradi (orqa tishlar ochiladi), model "zoom" bo'lib
+  // kattalashib/kichrayib ketmaydi. Bosqichma-bosqich (prevFov→fov) hisoblanadi,
+  // shuning uchun foydalanuvchi qo'lda kattalashtirgani (scroll) ham saqlanadi.
+  useEffect(() => {
+    const cam = cameraRef.current
+    if (!cam) return
+    const prev = prevFovRef.current
+    const target = controlsRef.current?.target ?? new THREE.Vector3(0, 0, 0)
+    // Model o'lchamini saqlash uchun masofani tan(prev/2)/tan(fov/2) nisbatida kattalashtiramiz
+    const scale =
+      Math.tan(THREE.MathUtils.degToRad(prev / 2)) /
+      Math.tan(THREE.MathUtils.degToRad(fov / 2))
+    const offset = cam.position.clone().sub(target).multiplyScalar(scale)
+    cam.position.copy(target).add(offset)
+    cam.fov = fov
+    cam.updateProjectionMatrix()
+    controlsRef.current?.update()
+    prevFovRef.current = fov
+  }, [fov, loading])
 
   return (
     <div
@@ -274,20 +329,44 @@ export default function Model3DViewer({ url, name, onClose, onDownload }: Props)
         )}
 
         {!loading && !error && (
-          <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg border border-[#1e293b] bg-[#0f172a]/90 px-3 py-2 backdrop-blur-sm">
-            <span className="text-sm" title="Yorug'lik">☀️</span>
-            <input
-              type="range"
-              min={0.4}
-              max={2.2}
-              step={0.1}
-              value={lightMult}
-              onChange={(e) => setLightMult(Number(e.target.value))}
-              className="w-28 accent-[#7dd3fc]"
-            />
-            <span className="w-9 text-right text-[10px] tabular-nums text-slate-500">
-              {Math.round(lightMult * 100)}%
-            </span>
+          <div className="absolute bottom-3 right-3 flex flex-col gap-2 rounded-lg border border-[#1e293b] bg-[#0f172a]/90 px-3 py-2 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-sm" title="Yorug'lik">☀️</span>
+              <input
+                type="range"
+                min={0.4}
+                max={2.2}
+                step={0.1}
+                value={lightMult}
+                onChange={(e) => setLightMult(Number(e.target.value))}
+                className="w-28 accent-[#7dd3fc]"
+              />
+              <span className="w-9 text-right text-[10px] tabular-nums text-slate-500">
+                {Math.round(lightMult * 100)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFov(DEFAULT_FOV)}
+                title="FOV (ko'rish burchagi) — kichraytirsangiz orqa tishlar (18·28·38·48) old tishlar ortidan chiqadi. Bosib standartga qaytaring"
+                className="text-sm hover:opacity-80"
+              >
+                🔍
+              </button>
+              <input
+                type="range"
+                min={MIN_FOV}
+                max={MAX_FOV}
+                step={1}
+                value={fov}
+                onChange={(e) => setFov(Number(e.target.value))}
+                className="w-28 accent-[#7dd3fc]"
+              />
+              <span className="w-9 text-right text-[10px] tabular-nums text-slate-500">
+                {fov}°
+              </span>
+            </div>
           </div>
         )}
       </div>

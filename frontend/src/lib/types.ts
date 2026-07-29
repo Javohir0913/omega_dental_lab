@@ -175,6 +175,22 @@ export interface OrderCard {
   pause_reason: string | null
   paused_by: UserShort | null
   can_resume: boolean
+  /** Bosqich dedlaynigacha qolgan vaqt; ish kalendari yoqiq bo'lsa — faqat ISH sekundlari */
+  stage_remaining_seconds: number | null
+  /** Hozir vaqt to'xtab turibdi (dam kuni / bayram / ish soatidan tashqari) */
+  deadline_paused: boolean
+  deadline_pause_reason: 'holiday' | 'weekend' | 'off_hours' | null
+}
+
+export interface WorkCalendarStatus {
+  enabled: boolean
+  working_now: boolean
+  reason: 'holiday' | 'weekend' | 'off_hours' | null
+  holiday_name_ru: string | null
+  holiday_name_uz: string | null
+  resumes_at: string | null
+  work_hour_start: string
+  work_hour_end: string
 }
 
 export interface OrderDetail extends OrderCard {

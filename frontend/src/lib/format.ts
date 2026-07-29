@@ -22,6 +22,12 @@ export function dateOnly(v: string | Date | null | undefined): string {
   return d ? format(d, 'dd.MM.yyyy') : '—'
 }
 
+/** "03.08 09:00" — qisqa sana + vaqt. */
+export function shortDt(v: string | Date | null | undefined): string {
+  const d = parse(v)
+  return d ? format(d, 'dd.MM HH:mm') : '—'
+}
+
 export function timeOnly(v: string | Date | null | undefined): string {
   const d = parse(v)
   return d ? format(d, 'HH:mm') : '—'
@@ -50,12 +56,28 @@ export function duration(sec: number | null | undefined): string {
   return `${m} ${L.m}`
 }
 
-/** Dedlaynga qolgan vaqt; manfiy bo'lsa kechikkan. */
-export function deadlineInfo(v: string | null | undefined): {
+/**
+ * Dedlaynga qolgan vaqt; manfiy bo'lsa kechikkan.
+ *
+ * `remainingSec` berilsa (serverdan kelgan `stage_remaining_seconds`) — vaqt
+ * o'sha son bo'yicha ko'rsatiladi. Ish kalendari yoqilgan bo'lsa u faqat ISH
+ * sekundlarini bildiradi, ya'ni dam kuni/bayramda kamaymaydi.
+ */
+export function deadlineInfo(
+  v: string | null | undefined,
+  remainingSec?: number | null,
+): {
   text: string
   overdue: boolean
   soon: boolean
 } | null {
+  if (remainingSec != null) {
+    return {
+      text: remainingSec < 0 ? `−${duration(-remainingSec)}` : duration(remainingSec),
+      overdue: remainingSec < 0,
+      soon: remainingSec >= 0 && remainingSec < 4 * 3600,
+    }
+  }
   const d = parse(v)
   if (!d) return null
   const diff = d.getTime() - Date.now()

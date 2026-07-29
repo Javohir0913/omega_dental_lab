@@ -16,6 +16,7 @@ import Model3DViewer from '@/components/Model3DViewer'
 import Model3DThumbnail from '@/components/Model3DThumbnail'
 import PhotoThumb from '@/components/PhotoThumb'
 import ToothChart from '@/components/ToothChart'
+import WorkCalendarNotice from '@/components/WorkCalendarNotice'
 import { useToothLabels } from '@/lib/useToothLabels'
 import { dt, duration, fileSize, fromLocalInput, fromNow, toLocalInput } from '@/lib/format'
 import { RAW_EXTS } from '@/lib/fileTypes'
@@ -196,6 +197,14 @@ export default function OrderPage() {
           </div>
           {order.pause_reason && <div className="mt-0.5">{t('pause_reason')}: {order.pause_reason}</div>}
         </div>
+      )}
+
+      {order.deadline_paused && (
+        <WorkCalendarNotice
+          variant="bar"
+          remainingSec={order.stage_remaining_seconds}
+          className="mb-4"
+        />
       )}
 
       {/* Bosqichlar chizig'i (Bitrix uslubida) */}
@@ -549,7 +558,19 @@ function InfoTab({
               const inStageRow = (
                 <tr key="_in_stage" className="border-b border-surface-border dark:border-[#2a3140]">
                   <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('in_stage')}</td>
-                  <td className="py-2">{order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}</td>
+                  <td className="py-2">
+                    {order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}
+                    {order.stage_remaining_seconds != null && (
+                      <span className="ml-2 text-xs text-ink-faint">
+                        · {t('wc_work_time_left')}:{' '}
+                        <span className={clsx(order.stage_remaining_seconds < 0 && 'text-rose-600')}>
+                          {order.stage_remaining_seconds < 0
+                            ? `−${duration(-order.stage_remaining_seconds)}`
+                            : duration(order.stage_remaining_seconds)}
+                        </span>
+                      </span>
+                    )}
+                  </td>
                 </tr>
               )
 

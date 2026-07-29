@@ -30,7 +30,8 @@ export function CardBody({
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
-  const dl = deadlineInfo(order.stage_deadline ?? order.deadline)
+  // Ish kalendari yoqilgan bo'lsa — qolgan ISH vaqti (dam kuni/tunda kamaymaydi)
+  const dl = deadlineInfo(order.stage_deadline ?? order.deadline, order.stage_remaining_seconds)
   const projectDl = deadlineInfo(order.deadline)
   const show = (key: string) => fields?.[key] !== false
   const hasBottom =
@@ -241,12 +242,13 @@ export function CardBody({
             ) : (
               show('deadline') && dl && (
                 <span
+                  title={order.deadline_paused ? t('wc_time_stopped') : undefined}
                   className={clsx(
                     order.is_overdue && 'font-medium text-rose-600',
                     dl.soon && !order.is_overdue && 'text-amber-600',
                   )}
                 >
-                  🕐 {dl.text}
+                  {order.deadline_paused ? '⏸' : '🕐'} {dl.text}
                 </span>
               )
             )}

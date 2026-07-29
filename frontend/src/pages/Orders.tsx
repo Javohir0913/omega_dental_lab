@@ -10,7 +10,8 @@ import { toast } from '@/components/Toast'
 import OrderForm from '@/components/OrderForm'
 import PauseModal from '@/components/PauseModal'
 import { CardBody } from '@/components/OrderCardView'
-import { deadlineInfo, dt, fromNow } from '@/lib/format'
+import WorkCalendarNotice from '@/components/WorkCalendarNotice'
+import { deadlineInfo, dt, duration, fromNow } from '@/lib/format'
 import type { OrderCard, Page, Stage } from '@/lib/types'
 
 export default function OrdersPage() {
@@ -262,6 +263,7 @@ export default function OrdersPage() {
         )}
 
         <div className="flex-1" />
+        <WorkCalendarNotice />
         <span className="text-xs text-ink-faint">{data?.total ?? 0}</span>
 
         {!trash && (
@@ -392,7 +394,25 @@ export default function OrdersPage() {
                             : 'text-ink-soft',
                         )}
                       >
-                        {o.stage_deadline ? dt(o.stage_deadline) : '—'}
+                        {o.stage_deadline ? (
+                          <span
+                            title={
+                              o.deadline_paused
+                                ? `${t('wc_time_stopped')} · ${dt(o.stage_deadline)}`
+                                : undefined
+                            }
+                          >
+                            {o.deadline_paused && '⏸ '}
+                            {dt(o.stage_deadline)}
+                            {o.stage_remaining_seconds != null && o.stage_remaining_seconds >= 0 && (
+                              <span className="ml-1 text-ink-faint">
+                                ({duration(o.stage_remaining_seconds)})
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                     )}
                     {!trash && (

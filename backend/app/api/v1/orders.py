@@ -16,6 +16,7 @@ from app.models import (
     FieldEntity,
     FileAsset,
     FileEntity,
+    Holiday,
     LogCategory,
     Message,
     NotifyEvent,
@@ -41,9 +42,11 @@ from app.schemas.order import (
     OrderPause,
     OrderUpdate,
     StageHistoryOut,
+    WorkCalendarStatus,
 )
 from app.services import orders as svc
 from app.services import requirements as req_svc
+from app.services import workcalendar
 from app.services.custom_fields import get_values, get_values_bulk, set_values
 from app.services.logger import log_activity
 from app.services.notify import notify
@@ -116,8 +119,33 @@ async def _get_order(db, order_id: int, user: User) -> Order:  # noqa: ANN001
     return order
 
 
-def _decorate(card: OrderCard, order: Order, user: User) -> OrderCard:
+async def _decorate(  # noqa: ANN001
+    db, card: OrderCard, order: Order, user: User, cal: workcalendar.WorkCalendar | None = None
+) -> OrderCard:
     now = now_utc()
+    if cal is None:
+        cal = await workcalendar.load_calendar(db)
+
+    # Qolgan ISH vaqti — faqat kalendar yoqilganda beriladi (dam kuni/tun sanalmaydi,
+    # shuning uchun bu son dam kunlari o'zgarmaydi va interfeysda vaqt to'xtagani ko'rinadi).
+    # Kalendar o'chiq bo'lsa `null` qoladi — interfeys avvalgidek dedlayn sanasini ko'rsatadi.
+    if cal.enabled and not order.is_closed:
+        if order.is_paused:
+            card.stage_remaining_seconds = order.stage_deadline_frozen_remaining_sec
+        elif order.stage_deadline:
+            card.stage_remaining_seconds = workcalendar.business_seconds_between(
+                now, order.stage_deadline, cal
+            )
+
+    if (
+        cal.enabled
+        and not order.is_closed
+        and not order.is_paused
+        and order.stage_deadline is not None
+    ):
+        card.deadline_pause_reason = workcalendar.nonworking_reason(now, cal)
+        card.deadline_paused = card.deadline_pause_reason is not None
+
     card.is_overdue = bool(
         not order.is_closed
         and (
@@ -253,6 +281,7 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         has_3d_map[entity_id] = bool(has_3d)
     unread_map = await _order_unread_map(db, ids, user.id)
     unread_files_map = await _order_unread_files_map(db, ids, user.id, files_count)
+    cal = await workcalendar.load_calendar(db)  # ro'yxat uchun bir marta yuklanadi
 
     out = []
     for o in orders:
@@ -262,7 +291,7 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         card.has_3d_files = has_3d_map.get(o.id, False)
         card.unread_messages = unread_map.get(o.id, 0)
         card.unread_files_count = unread_files_map.get(o.id, 0)
-        out.append(_decorate(card, o, user))
+        out.append(await _decorate(db, card, o, user, cal))
     return out
 
 
@@ -270,6 +299,42 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
 async def tooth_labels(db: DbDep, _: CurrentUser):
     """Tish chizmasida ko'rsatiladigan yorliqlar (FDI kod -> ko'rinadigan raqam). Har qanday login qilgan foydalanuvchi ko'ra oladi."""
     return await get_setting(db, "tooth_labels", DEFAULT_SETTINGS["tooth_labels"][0]["v"])
+
+
+@router.get("/work-calendar", response_model=WorkCalendarStatus)
+async def work_calendar_status(db: DbDep, _: CurrentUser):
+    """Hozir bosqich vaqti ketyaptimi yoki to'xtaganmi (dam kuni/bayram/ish soatidan tashqari)."""
+    cal = await workcalendar.load_calendar(db)
+    now = now_utc()
+    out = WorkCalendarStatus(
+        enabled=cal.enabled,
+        working_now=True,
+        work_hour_start=cal.start.strftime("%H:%M"),
+        work_hour_end=cal.end.strftime("%H:%M"),
+    )
+    if not cal.enabled:
+        return out
+
+    out.reason = workcalendar.nonworking_reason(now, cal)
+    out.working_now = out.reason is None
+    if out.working_now:
+        return out
+
+    out.resumes_at = workcalendar.next_work_start(now, cal)
+    if out.reason == "holiday":
+        today = now.astimezone(workcalendar.APP_TZ).date()
+        res = await db.execute(
+            select(Holiday).where(
+                Holiday.month == today.month,
+                Holiday.day == today.day,
+                or_(Holiday.year.is_(None), Holiday.year == today.year),
+            )
+        )
+        holiday = res.scalars().first()
+        if holiday is not None:
+            out.holiday_name_ru = holiday.name_ru
+            out.holiday_name_uz = holiday.name_uz
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -403,7 +468,7 @@ async def get_order(order_id: int, db: DbDep, user: CurrentUser):
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    _decorate(detail, order, user)
+    await _decorate(db, detail, order, user)
 
     res = await db.execute(select(Chat.id).where(Chat.order_id == order.id))
     detail.chat_id = res.scalar_one_or_none()
@@ -532,7 +597,7 @@ async def create_order(
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
     detail.chat_id = chat.id
-    return _decorate(detail, order, actor)
+    return await _decorate(db, detail, order, actor)
 
 
 @router.patch("/{order_id}", response_model=OrderDetail)
@@ -607,7 +672,7 @@ async def update_order(
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.delete("/{order_id}", response_model=Msg)
@@ -801,7 +866,7 @@ async def move_order(
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.post("/{order_id}/pause", response_model=OrderDetail)
@@ -816,7 +881,7 @@ async def pause_order(order_id: int, body: OrderPause, request: Request, db: DbD
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.post("/{order_id}/resume", response_model=OrderDetail)
@@ -829,7 +894,7 @@ async def resume_order(order_id: int, request: Request, db: DbDep, user: Current
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.post("/{order_id}/claim", response_model=OrderDetail)
@@ -842,7 +907,7 @@ async def claim_order(order_id: int, request: Request, db: DbDep, user: CurrentU
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.post("/{order_id}/files/read", response_model=Msg)
@@ -881,7 +946,7 @@ async def assign_order(
 
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
-    return _decorate(detail, order, user)
+    return await _decorate(db, detail, order, user)
 
 
 @router.get("/{order_id}/available-assignees", response_model=list[dict])

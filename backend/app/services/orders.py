@@ -1,6 +1,6 @@
 """Proyekt (zakaz) mantiqi: raqam, bosqich almashish, marshrut tarixi, claim."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import distinct, func, select
@@ -117,6 +117,32 @@ def can_edit(user: User, order: Order) -> bool:
 
 
 # --------------------------------------------------------------------------
+# Bosqich dedlayni (ish kalendari bilan)
+# --------------------------------------------------------------------------
+
+
+async def remaining_stage_seconds(db: AsyncSession, now: datetime, deadline: datetime) -> int:
+    """Dedlayngacha qolgan vaqt sekundlarda; manfiy bo'lsa — kechikish.
+
+    Ish kalendari yoqilgan bo'lsa faqat ish vaqti sanaladi — ya'ni pauza yoki
+    orqaga qaytarish paytida «qolgan vaqt» dam kunlari va tunlarni o'z ichiga olmaydi.
+    """
+    cal = await workcalendar.load_calendar(db)
+    if cal.enabled:
+        return workcalendar.business_seconds_between(now, deadline, cal)
+    return int((deadline - now).total_seconds())
+
+
+async def deadline_after(db: AsyncSession, start: datetime, seconds: float) -> datetime:
+    """`start`dan `seconds` o'tgach keladigan dedlayn.
+
+    Kalendar yoqilgan bo'lsa vaqt faqat ish kunlari/soatlarida «ketadi».
+    """
+    cal = await workcalendar.load_calendar(db)
+    return workcalendar.shift_deadline(start, seconds, cal)
+
+
+# --------------------------------------------------------------------------
 # Marshrut tarixi
 # --------------------------------------------------------------------------
 
@@ -151,7 +177,11 @@ async def close_history(db: AsyncSession, order: Order, comment: str | None = No
     row.responsible_id = order.responsible_id  # kim yakunda ishlagan bo'lsa
     if order.stage_deadline:
         row.was_overdue = now > order.stage_deadline
-        row.remaining_seconds = int((order.stage_deadline - now).total_seconds())
+        row.remaining_seconds = await remaining_stage_seconds(db, now, order.stage_deadline)
+    elif order.stage_deadline_frozen_remaining_sec is not None:
+        # Pauzada turganda boshqa bosqichga ko'chirildi — muzlatilgan qoldiq yo'qolmasin
+        row.remaining_seconds = order.stage_deadline_frozen_remaining_sec
+        row.was_overdue = order.stage_deadline_frozen_remaining_sec < 0
     if comment:
         row.comment = comment
     await db.flush()
@@ -223,16 +253,14 @@ async def apply_stage_deadline(
         )
         remaining = res.scalar_one_or_none()
         if remaining is not None:
-            order.stage_deadline = order.stage_entered_at + timedelta(seconds=max(0, remaining))
+            order.stage_deadline = await deadline_after(
+                db, order.stage_entered_at, max(0, remaining)
+            )
             return
 
-    cal = await workcalendar.load_calendar(db)
-    if cal.enabled:
-        order.stage_deadline = workcalendar.add_business_hours(
-            order.stage_entered_at, stage.duration_hours, cal
-        )
-    else:
-        order.stage_deadline = order.stage_entered_at + timedelta(hours=stage.duration_hours)
+    order.stage_deadline = await deadline_after(
+        db, order.stage_entered_at, stage.duration_hours * 3600
+    )
 
 
 # --------------------------------------------------------------------------
@@ -326,19 +354,22 @@ async def move_to_stage(
         return order
 
     was_paused = order.is_paused
-    if was_paused:
-        order.is_paused = False
-        order.paused_at = None
-        order.pause_reason = None
-        order.paused_by_id = None
-        order.stage_deadline_frozen_remaining_sec = None
 
     is_backward = to_stage.sort < from_stage.sort
     skipped_ids = (
         await skipped_stage_workers(db, order, from_stage, to_stage) if is_backward else []
     )
 
+    # Tarix pauza tozalanishidan OLDIN yopiladi — aks holda pauzada turgan
+    # proyektning muzlatilgan qoldiq vaqti tarixga yozilmay yo'qolib ketardi.
     await close_history(db, order, comment)
+
+    if was_paused:
+        order.is_paused = False
+        order.paused_at = None
+        order.pause_reason = None
+        order.paused_by_id = None
+        order.stage_deadline_frozen_remaining_sec = None
 
     order.stage_id = to_stage.id
     order.stage = to_stage
@@ -495,8 +526,8 @@ async def pause(
 
     now = now_utc()
     if order.stage_deadline:
-        order.stage_deadline_frozen_remaining_sec = int(
-            (order.stage_deadline - now).total_seconds()
+        order.stage_deadline_frozen_remaining_sec = await remaining_stage_seconds(
+            db, now, order.stage_deadline
         )
         order.stage_deadline = None
     else:
@@ -547,7 +578,9 @@ async def resume(db: AsyncSession, order: Order, user: User, request=None) -> Or
     reason = order.pause_reason
     now = now_utc()
     if order.stage_deadline_frozen_remaining_sec is not None:
-        order.stage_deadline = now + timedelta(seconds=max(0, order.stage_deadline_frozen_remaining_sec))
+        order.stage_deadline = await deadline_after(
+            db, now, max(0, order.stage_deadline_frozen_remaining_sec)
+        )
         order.stage_deadline_frozen_remaining_sec = None
 
     order.is_paused = False

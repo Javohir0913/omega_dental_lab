@@ -65,6 +65,14 @@ class OrderCard(ORMModel):
     pause_reason: str | None = None
     paused_by: UserShort | None = None
     can_resume: bool = False
+    # Bosqich dedlaynigacha qolgan vaqt. Ish kalendari yoqilgan bo'lsa — faqat ISH
+    # sekundlari (dam kuni/tun sanalmaydi), shuning uchun dam kunlari kamaymaydi.
+    # Manfiy — kechikish. Pauzada — muzlatilgan qoldiq.
+    stage_remaining_seconds: int | None = None
+    # Hozir vaqt to'xtab turibdi (dam kuni / bayram / ish soatidan tashqari)
+    deadline_paused: bool = False
+    # Nega to'xtagan: holiday | weekend | off_hours
+    deadline_pause_reason: str | None = None
 
 
 class OrderDetail(OrderCard):
@@ -138,6 +146,19 @@ class OrderAssign(BaseModel):
 
 class OrderPause(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
+
+
+class WorkCalendarStatus(BaseModel):
+    """Ish kalendarining joriy holati — interfeysda «vaqt to'xtagan» belgisi uchun."""
+
+    enabled: bool
+    working_now: bool
+    reason: str | None = None  # holiday | weekend | off_hours
+    holiday_name_ru: str | None = None
+    holiday_name_uz: str | None = None
+    resumes_at: datetime | None = None
+    work_hour_start: str = "09:00"
+    work_hour_end: str = "18:00"
 
 
 class KanbanColumn(BaseModel):

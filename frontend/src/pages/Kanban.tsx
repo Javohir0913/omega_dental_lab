@@ -24,6 +24,7 @@ import SortableCard, { CardBody } from '@/components/OrderCardView'
 import MoveModal from '@/components/MoveModal'
 import PauseModal from '@/components/PauseModal'
 import OrderForm from '@/components/OrderForm'
+import WorkCalendarNotice from '@/components/WorkCalendarNotice'
 import type { KanbanColumn, OrderCard, RequirementError, Stage, CustomField } from '@/lib/types'
 import { useCardFields } from '@/lib/useCardFields'
 
@@ -300,6 +301,8 @@ export default function KanbanPage() {
         ))}
 
         <div className="flex-1" />
+
+        <WorkCalendarNotice />
 
         <div className="relative" ref={fieldsRef}>
           <button

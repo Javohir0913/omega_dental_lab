@@ -1,5 +1,5 @@
 from app.db.base import Base
-from app.models.catalog import Doctor, Patient, Service, Stage, StageKind
+from app.models.catalog import Doctor, Patient, Service, Stage, StageKind, stage_transitions
 from app.models.chat import Chat, ChatMember, ChatType, Message
 from app.models.custom_field import (
     SYSTEM_ORDER_FIELDS,
@@ -23,6 +23,7 @@ from app.models.user import (
     Role,
     User,
     UserSession,
+    role_move_stages,
     role_permissions,
     user_services,
     user_stages,
@@ -30,7 +31,7 @@ from app.models.user import (
 
 __all__ = [
     "Base",
-    "Doctor", "Patient", "Service", "Stage", "StageKind",
+    "Doctor", "Patient", "Service", "Stage", "StageKind", "stage_transitions",
     "Chat", "ChatMember", "ChatType", "Message",
     "CustomField", "CustomFieldValue", "FieldEntity", "FieldType",
     "RequirementMoment", "StageRequirement", "SYSTEM_ORDER_FIELDS",
@@ -43,5 +44,5 @@ __all__ = [
     "Setting", "DEFAULT_SETTINGS",
     "TelegramContact",
     "Permission", "Role", "User", "UserSession",
-    "role_permissions", "user_services", "user_stages",
+    "role_move_stages", "role_permissions", "user_services", "user_stages",
 ]

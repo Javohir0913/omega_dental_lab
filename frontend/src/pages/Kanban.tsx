@@ -149,6 +149,8 @@ export default function KanbanPage() {
   }, [showFields])
 
   const systemFieldDefs = [
+    { key: 'title', label: lang === 'ru' ? 'Название проекта' : 'Proyekt nomi' },
+    { key: 'number', label: lang === 'ru' ? 'Номер (id)' : 'Raqami (id)' },
     { key: 'photo', label: lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi' },
     { key: 'patient', label: t('cf_patient') },
     { key: 'doctor', label: t('cf_doctor') },
@@ -187,19 +189,6 @@ export default function KanbanPage() {
   const columns = workOnly ? allColumns.filter((c) => c.stage.kind === 'work') : allColumns
   const stages = useMemo(() => columns.map((c) => c.stage), [columns])
   const finalStages = useMemo(() => allColumns.filter((c) => c.stage.kind === 'success' || c.stage.kind === 'fail').map((c) => c.stage), [allColumns])
-  const orderedStages = useMemo(
-    () =>
-      allColumns
-        .map((c) => c.stage)
-        .filter((s) => s.kind !== 'success' && s.kind !== 'fail')
-        .sort((a, b) => a.sort - b.sort),
-    [allColumns],
-  )
-  function prevStageOf(order: OrderCard): Stage | null {
-    const idx = orderedStages.findIndex((s) => s.id === order.stage_id)
-    if (idx <= 0) return null
-    return orderedStages[idx - 1]
-  }
   const [moveBack, setMoveBack] = useState<{ order: OrderCard; stage: Stage } | null>(null)
   const [pauseTarget, setPauseTarget] = useState<OrderCard | null>(null)
   const [resumeTarget, setResumeTarget] = useState<OrderCard | null>(null)
@@ -331,7 +320,7 @@ export default function KanbanPage() {
                 ))}
               </div>
               <div className="border-t border-surface-border px-2 py-1.5 dark:border-[#2f3745]">
-                <button className="text-xs text-ink-faint hover:text-ink" onClick={showAll}>
+                <button className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]" onClick={showAll}>
                   {t('all')}
                 </button>
               </div>
@@ -379,9 +368,8 @@ export default function KanbanPage() {
                       cfDefs={cardCustomFields}
                       onOpen={() => navigate(`/orders/${o.id}`)}
                       onClaim={() => claim(o)}
-                      prevStage={prevStageOf(o)}
-                      onMoveBack={() => {
-                        const stage = prevStageOf(o)
+                      onMoveBack={async () => {
+                        const stage = (await api.get<Stage | null>(`/orders/${o.id}/prev-stage`)).data
                         if (stage) setMoveBack({ order: o, stage })
                       }}
                       onPause={() => setPauseTarget(o)}

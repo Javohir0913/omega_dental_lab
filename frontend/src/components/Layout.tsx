@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
   { to: '/doctors', key: 'nav_doctors', perm: 'doctor.view', icon: '✚' },
   { to: '/services', key: 'nav_services', perm: 'service.view', icon: '❖' },
   { to: '/users', key: 'nav_users', perm: 'user.view', icon: '☷' },
+  { to: '/reports', key: 'nav_reports', perm: 'report.view', icon: '📊' },
   { to: '/logs', key: 'nav_logs', perm: 'log.system', icon: '⌘' },
 ]
 
@@ -169,7 +170,7 @@ export default function Layout() {
               className={({ isActive }) =>
                 clsx(
                   'mt-2 flex items-center gap-2.5 rounded-lg border-t border-surface-border px-2.5 pb-2 pt-3 text-sm dark:border-[#2a3140]',
-                  isActive ? 'font-medium text-brand-700' : 'text-ink-soft hover:text-ink',
+                  isActive ? 'font-medium text-brand-700' : 'text-ink-soft hover:text-ink dark:hover:text-[#e6e9ee]',
                 )
               }
               title={navCollapsed ? t('nav_admin') : undefined}

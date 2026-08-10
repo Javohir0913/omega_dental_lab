@@ -3,6 +3,8 @@ import { useState, useCallback } from 'react'
 const STORAGE_KEY = 'omega_kanban_fields'
 
 const DEFAULT_VISIBILITY: Record<string, boolean> = {
+  title: true,
+  number: true,
   patient: true,
   doctor: true,
   services: true,

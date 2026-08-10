@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from app.core.deps import DbDep, require
-from app.models import LogCategory, Permission, Role, User
+from app.models import LogCategory, Permission, Role, Stage, User
 from app.schemas.common import Msg
 from app.schemas.user import PermissionOut, RoleCreate, RoleOut, RoleUpdate
 from app.services.logger import log_activity
@@ -52,6 +52,10 @@ async def create_role(
     res = await db.execute(select(Permission).where(Permission.code.in_(body.permission_codes)))
     role.permissions = list(res.scalars().all())
 
+    if body.move_stage_ids:
+        res = await db.execute(select(Stage).where(Stage.id.in_(body.move_stage_ids)))
+        role.move_stages = list(res.scalars().all())
+
     await log_activity(
         db,
         action="admin.role_created",
@@ -86,6 +90,7 @@ async def update_role(
 
     data = body.model_dump(exclude_unset=True)
     perm_codes = data.pop("permission_codes", None)
+    move_stage_ids = data.pop("move_stage_ids", None)
 
     if role.is_system and data.get("is_active") is False:
         raise HTTPException(400, "system_role_cannot_be_disabled")
@@ -97,6 +102,10 @@ async def update_role(
     if perm_codes is not None:
         res = await db.execute(select(Permission).where(Permission.code.in_(perm_codes)))
         role.permissions = list(res.scalars().all())
+
+    if move_stage_ids is not None:
+        res = await db.execute(select(Stage).where(Stage.id.in_(move_stage_ids)))
+        role.move_stages = list(res.scalars().all())
 
     await log_activity(
         db,

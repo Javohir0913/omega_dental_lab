@@ -14,6 +14,15 @@ class PermissionOut(ORMModel):
     name_uz: str
 
 
+class StageShort(ORMModel):
+    id: int
+    code: str
+    name_ru: str
+    name_uz: str
+    kind: str
+    color: str
+
+
 class RoleOut(ORMModel):
     id: int
     code: str
@@ -23,6 +32,7 @@ class RoleOut(ORMModel):
     is_active: bool
     default_session_limit: int
     permissions: list[PermissionOut] = []
+    move_stages: list[StageShort] = []
 
 
 class RoleShort(ORMModel):
@@ -38,6 +48,7 @@ class RoleCreate(BaseModel):
     name_uz: str
     default_session_limit: int = 1
     permission_codes: list[str] = []
+    move_stage_ids: list[int] = []
 
 
 class RoleUpdate(BaseModel):
@@ -46,15 +57,7 @@ class RoleUpdate(BaseModel):
     is_active: bool | None = None
     default_session_limit: int | None = None
     permission_codes: list[str] | None = None
-
-
-class StageShort(ORMModel):
-    id: int
-    code: str
-    name_ru: str
-    name_uz: str
-    kind: str
-    color: str
+    move_stage_ids: list[int] | None = None
 
 
 class ServiceShort(ORMModel):

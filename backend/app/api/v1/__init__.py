@@ -10,6 +10,7 @@ from app.api.v1 import (
     logs,
     notifications,
     orders,
+    reports,
     roles,
     stages,
     users,
@@ -32,4 +33,5 @@ api_router.include_router(notifications.router)
 api_router.include_router(logs.router)
 api_router.include_router(admin.router)
 api_router.include_router(layout.router)
+api_router.include_router(reports.router)
 api_router.include_router(ws.router)

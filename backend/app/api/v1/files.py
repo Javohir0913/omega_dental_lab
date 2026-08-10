@@ -560,7 +560,7 @@ async def delete_file(
     asset.deleted_at = now_utc()
     await log_activity(
         db, action="file.deleted", category=LogCategory.FILE, actor=user,
-        order_id=asset.entity_id if asset.entity == FileEntity.ORDER else None,
+        order_id=asset.entity_id if asset.entity == FileEntity.ORDER and asset.entity_id else None,
         entity="file", entity_id=asset.id,
         message_ru=f"Удалён файл {asset.name}",
         message_uz=f"Fayl o'chirildi: {asset.name}",

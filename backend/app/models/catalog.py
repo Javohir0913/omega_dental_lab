@@ -1,9 +1,20 @@
 from datetime import date
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+
+# Bosqichdan-bosqichga qaysi o'tishlar ruxsat etilganini sozlash uchun.
+# `from_stage_id` uchun bu yerda birorta ham qator bo'lmasa — o'sha bosqichdan
+# istalgan bosqichga o'tish mumkin (cheklovsiz, hozirgidek). Birorta qator
+# qo'shilgan bo'lsa — faqat o'sha ko'rsatilgan nishon bosqichlarga o'tish mumkin.
+stage_transitions = Table(
+    "stage_transitions",
+    Base.metadata,
+    Column("from_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+    Column("to_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class StageKind:

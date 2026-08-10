@@ -5,7 +5,7 @@ import { Avatar } from '@/components/ui'
 import PhotoThumb from '@/components/PhotoThumb'
 import { useLang, useT } from '@/i18n'
 import { deadlineInfo } from '@/lib/format'
-import type { CustomField, OrderCard, Stage } from '@/lib/types'
+import type { CustomField, OrderCard } from '@/lib/types'
 
 export function CardBody({
   order,
@@ -13,7 +13,6 @@ export function CardBody({
   onClaim,
   fields,
   cfDefs,
-  prevStage,
   onMoveBack,
   onPause,
   onResume,
@@ -23,7 +22,6 @@ export function CardBody({
   onClaim?: () => void
   fields?: Record<string, boolean>
   cfDefs?: CustomField[]
-  prevStage?: Stage | null
   onMoveBack?: () => void
   onPause?: () => void
   onResume?: () => void
@@ -83,7 +81,9 @@ export function CardBody({
       )}
 
       <div className="flex items-start justify-between gap-2">
-        <span className="font-mono text-[10px] text-ink-faint">{order.number}</span>
+        {show('number') && (
+          <span className="font-mono text-[10px] text-ink-faint">{order.number}</span>
+        )}
         <div className="flex shrink-0 items-center gap-1">
           {show('priority') && order.priority < 300 && (
             <span className="chip bg-amber-100 text-amber-700">↑</span>
@@ -119,7 +119,7 @@ export function CardBody({
                 e.stopPropagation()
                 onPause()
               }}
-              className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38]"
+              className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38] dark:hover:text-[#e6e9ee]"
             >
               {t('pause')}
             </button>
@@ -127,7 +127,9 @@ export function CardBody({
         </div>
       </div>
 
-      <div className="mt-0.5 line-clamp-2 text-[13px] font-medium leading-snug">{order.title}</div>
+      {show('title') && (
+        <div className="mt-0.5 line-clamp-2 text-[13px] font-medium leading-snug">{order.title}</div>
+      )}
 
       {order.is_paused && order.pause_reason && (
         <div className="mt-1 truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -190,7 +192,7 @@ export function CardBody({
         </div>
       ) : null)}
 
-      {(hasBottom || (prevStage && order.can_move_back && onMoveBack)) && (
+      {(hasBottom || (order.can_move_back && onMoveBack)) && (
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-surface-border pt-2 dark:border-[#2a3140]">
           <div className="flex min-w-0 items-center gap-1.5">
             {show('responsible') && order.responsible ? (
@@ -215,7 +217,7 @@ export function CardBody({
                 {t('free')}
               </span>
             ) : null}
-            {prevStage && order.can_move_back && onMoveBack && (
+            {order.can_move_back && onMoveBack && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -266,7 +268,6 @@ export default function SortableCard({
   onClaim,
   fields,
   cfDefs,
-  prevStage,
   onMoveBack,
   onPause,
   onResume,
@@ -276,7 +277,6 @@ export default function SortableCard({
   onClaim: () => void
   fields?: Record<string, boolean>
   cfDefs?: CustomField[]
-  prevStage?: Stage | null
   onMoveBack?: () => void
   onPause?: () => void
   onResume?: () => void
@@ -301,7 +301,6 @@ export default function SortableCard({
         onClaim={onClaim}
         fields={fields}
         cfDefs={cfDefs}
-        prevStage={prevStage}
         onMoveBack={onMoveBack}
         onPause={onPause}
         onResume={onResume}

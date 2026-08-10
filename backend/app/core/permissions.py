@@ -61,6 +61,8 @@ PERMISSIONS: list[Perm] = [
     # --- Log ---
     P("log.order", "Логи", "Loglar", "Видеть лог проекта", "Proyekt logini ko'rish"),
     P("log.system", "Логи", "Loglar", "Видеть системный лог и ошибки", "Tizim logi va errorlarni ko'rish"),
+    # --- Otchyotlar ---
+    P("report.view", "Отчёты", "Hisobotlar", "Видеть отчёты по этапам/сотрудникам", "Bosqich/xodim hisobotlarini ko'rish"),
 ]
 
 PERMISSION_CODES = {p.code for p in PERMISSIONS}
@@ -80,7 +82,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
         "service.view", "service.manage",
         "user.view", "user.manage", "user.password", "user.session",
         "admin.stages", "admin.fields", "admin.notify", "admin.settings",
-        "log.order",
+        "log.order", "report.view",
     ],
     "hr": [
         "order.view.all", "order.create", "order.edit", "order.rename",
@@ -89,7 +91,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
         "chat.order", "chat.direct", "file.upload",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage", "service.view",
         "user.view", "user.manage", "user.password", "user.session",
-        "log.order",
+        "log.order", "report.view",
     ],
     "technician": [
         "order.view.all", "order.move.own", "order.move_back.others", "order.edit.others",

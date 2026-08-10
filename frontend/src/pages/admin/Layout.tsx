@@ -72,9 +72,29 @@ export default function AdminLayout() {
     )
   }
 
+  function toggleHidden(sectionCode: string, fieldRef: string) {
+    setSections((prev) =>
+      prev.map((s) =>
+        s.code !== sectionCode
+          ? s
+          : {
+              ...s,
+              fields: s.fields.map((f) =>
+                f.field_ref === fieldRef ? { ...f, is_hidden: !f.is_hidden } : f,
+              ),
+            },
+      ),
+    )
+  }
+
   async function saveAssignments() {
     const items = realSections.flatMap((s) =>
-      s.fields.map((f, i) => ({ section_id: s.id!, field_ref: f.field_ref, sort: (i + 1) * 100 })),
+      s.fields.map((f, i) => ({
+        section_id: s.id!,
+        field_ref: f.field_ref,
+        sort: (i + 1) * 100,
+        is_hidden: f.is_hidden,
+      })),
     )
     try {
       await api.put('/order-layout/assignments', { items })
@@ -124,8 +144,8 @@ export default function AdminLayout() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-xs text-ink-faint">
           {lang === 'ru'
-            ? 'Разделы и порядок полей на форме создания проекта и во вкладке «Инфо» проекта. Видно только вам (супер-админу).'
-            : 'Loyiha yaratish formasi va loyihaning «Info» tabidagi bo‘limlar/maydonlar tartibi. Faqat sizga (super-admin) ko‘rinadi.'}
+            ? 'Разделы и порядок полей на форме создания проекта и во вкладке «Инфо» проекта. Кнопка 👁/🚫 у поля скрывает его совсем (для всех). Видно только вам (супер-админу).'
+            : 'Loyiha yaratish formasi va loyihaning «Info» tabidagi bo‘limlar/maydonlar tartibi. Maydon yonidagi 👁/🚫 tugmasi uni butunlay yashiradi (hammaga). Faqat sizga (super-admin) ko‘rinadi.'}
         </p>
         <button className="btn-primary shrink-0" onClick={() => setCreating(true)}>
           + {t('add')}
@@ -153,7 +173,7 @@ export default function AdminLayout() {
                 </button>
               </div>
               <span className="flex-1 text-sm font-semibold">{lang === 'ru' ? s.name_ru : s.name_uz}</span>
-              <button className="text-xs text-ink-faint hover:text-ink" onClick={() => setRenaming(s)}>
+              <button className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]" onClick={() => setRenaming(s)}>
                 ✎
               </button>
               <button
@@ -172,6 +192,7 @@ export default function AdminLayout() {
               allSections={sections}
               onShift={(i, dir) => shiftField(s.code, i, dir)}
               onMoveTo={(ref, toCode) => moveField(ref, s.code, toCode)}
+              onToggleHidden={(ref) => toggleHidden(s.code, ref)}
               onAdd={() => setAdding(s)}
             />
           </div>
@@ -258,12 +279,14 @@ function FieldList({
   allSections,
   onShift,
   onMoveTo,
+  onToggleHidden,
   onAdd,
 }: {
   section: LayoutSection
   allSections: LayoutSection[]
   onShift: (index: number, dir: -1 | 1) => void
   onMoveTo: (fieldRef: string, toCode: string) => void
+  onToggleHidden?: (fieldRef: string) => void
   onAdd: (() => void) | null
 }) {
   const lang = useLang((s) => s.lang)
@@ -278,7 +301,10 @@ function FieldList({
         section.fields.map((f, i) => (
           <div
             key={f.field_ref}
-            className="flex items-center gap-2 rounded-md bg-surface-muted px-2 py-1.5 text-xs dark:bg-[#242b38]"
+            className={clsx(
+              'flex items-center gap-2 rounded-md bg-surface-muted px-2 py-1.5 text-xs dark:bg-[#242b38]',
+              f.is_hidden && 'opacity-50',
+            )}
           >
             <div className="flex flex-col">
               <button
@@ -305,6 +331,29 @@ function FieldList({
               {f.kind === 'system' ? (lang === 'ru' ? 'сист' : 'tizim') : 'cf'}
             </span>
             <span className="min-w-0 flex-1 truncate">{lang === 'ru' ? f.label_ru : f.label_uz}</span>
+            {onToggleHidden && (
+              <button
+                type="button"
+                title={
+                  f.is_hidden
+                    ? lang === 'ru'
+                      ? 'Скрыто — нажмите, чтобы показать'
+                      : 'Yashirilgan — ko‘rsatish uchun bosing'
+                    : lang === 'ru'
+                      ? 'Скрыть поле'
+                      : 'Maydonni yashirish'
+                }
+                onClick={() => onToggleHidden(f.field_ref)}
+                className={clsx(
+                  'shrink-0 rounded px-1.5 py-0.5 text-[11px]',
+                  f.is_hidden
+                    ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                    : 'text-ink-faint hover:bg-surface-border dark:hover:bg-[#2f3745]',
+                )}
+              >
+                {f.is_hidden ? '🚫' : '👁'}
+              </button>
+            )}
             <select
               className="input h-7 w-32 shrink-0 py-0 text-[11px]"
               value=""

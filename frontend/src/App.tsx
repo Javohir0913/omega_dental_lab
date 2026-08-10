@@ -20,6 +20,7 @@ import UsersPage from '@/pages/Users'
 import ChatsPage from '@/pages/Chats'
 import ProfilePage from '@/pages/Profile'
 import LogsPage from '@/pages/Logs'
+import ReportsPage from '@/pages/Reports'
 import AdminPage from '@/pages/Admin'
 
 function Protected({ children, perm }: { children: JSX.Element; perm?: string }) {
@@ -92,6 +93,7 @@ export default function App() {
         <Route path="chats/:chatId" element={<ChatsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="logs" element={<Protected perm="log.system"><LogsPage /></Protected>} />
+        <Route path="reports" element={<Protected perm="report.view"><ReportsPage /></Protected>} />
         <Route path="admin/*" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

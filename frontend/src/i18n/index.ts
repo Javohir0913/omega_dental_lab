@@ -57,6 +57,7 @@ export const dict: Dict = {
   nav_chats: { ru: 'Чаты', uz: 'Chatlar' },
   nav_admin: { ru: 'Админка', uz: 'Adminka' },
   nav_logs: { ru: 'Логи', uz: 'Loglar' },
+  nav_reports: { ru: 'Отчёты', uz: 'Hisobotlar' },
   nav_profile: { ru: 'Профиль', uz: 'Profil' },
 
   // proyekt

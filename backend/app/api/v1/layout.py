@@ -78,6 +78,7 @@ async def get_layout(db: DbDep, _: CurrentUser):
         lf = resolve(row.field_ref)
         if lf is None:
             continue
+        lf.is_hidden = row.is_hidden
         assigned_refs.add(row.field_ref)
         by_section.setdefault(row.section_id, []).append(lf)
 
@@ -278,7 +279,8 @@ async def save_assignments(
     for item in body.items:
         db.add(
             OrderFieldLayout(
-                entity=ENTITY, section_id=item.section_id, field_ref=item.field_ref, sort=item.sort
+                entity=ENTITY, section_id=item.section_id, field_ref=item.field_ref,
+                sort=item.sort, is_hidden=item.is_hidden,
             )
         )
 

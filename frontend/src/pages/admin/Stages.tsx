@@ -146,6 +146,7 @@ export default function AdminStages() {
       {(creating || edit) && (
         <StageForm
           stage={edit ?? undefined}
+          allStages={list}
           onClose={() => {
             setCreating(false)
             setEdit(null)
@@ -165,14 +166,17 @@ export default function AdminStages() {
 
 function StageForm({
   stage,
+  allStages,
   onClose,
   onDone,
 }: {
   stage?: Stage
+  allStages: Stage[]
   onClose: () => void
   onDone: () => void
 }) {
   const t = useT()
+  const nm = useNm()
   const lang = useLang((s) => s.lang)
   const edit = Boolean(stage)
 
@@ -187,7 +191,12 @@ function StageForm({
     require_next_assignee: stage?.require_next_assignee ?? false,
     is_active: stage?.is_active ?? true,
   })
+  const [nextStageIds, setNextStageIds] = useState<number[]>(stage?.next_stage_ids ?? [])
   const [busy, setBusy] = useState(false)
+
+  function toggleNextStage(id: number) {
+    setNextStageIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
+  }
 
   async function submit() {
     setBusy(true)
@@ -199,6 +208,7 @@ function StageForm({
       duration_hours: form.duration_hours === '' ? null : Number(form.duration_hours),
       allow_claim: form.allow_claim,
       require_next_assignee: form.require_next_assignee,
+      next_stage_ids: nextStageIds,
     }
     try {
       if (edit) {
@@ -336,6 +346,38 @@ function StageForm({
           </label>
         </>
       )}
+
+      <Field
+        label={lang === 'ru' ? 'Куда можно перевести' : 'Qayerga o‘tkazish mumkin'}
+        hint={
+          lang === 'ru'
+            ? 'Если не выбрать ни одного этапа — переход отсюда открыт куда угодно (как сейчас). Если выбрать хотя бы один — только туда.'
+            : 'Birorta ham bosqich tanlanmasa — bu yerdan istalgan bosqichga o‘tish mumkin (hozirgidek). Kamida bittasi tanlansa — faqat o‘sha(lar)ga.'
+        }
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {allStages
+            .filter((s) => s.id !== stage?.id)
+            .map((s) => {
+              const on = nextStageIds.includes(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggleNextStage(s.id)}
+                  className="chip border transition-all"
+                  style={{
+                    backgroundColor: on ? `${s.color}22` : 'transparent',
+                    borderColor: on ? s.color : '#e4e7ec',
+                    color: on ? s.color : '#8d96a3',
+                  }}
+                >
+                  {nm(s, 'name')}
+                </button>
+              )
+            })}
+        </div>
+      </Field>
 
       {edit && stage?.kind === 'work' && (
         <label className="flex cursor-pointer items-center gap-2 text-sm">

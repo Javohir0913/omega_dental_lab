@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -67,6 +67,12 @@ export default function OrderPage() {
     queryFn: async () => (await api.get<Stage[]>('/stages')).data,
   })
 
+  const { data: prevStage = null } = useQuery({
+    queryKey: ['order-prev-stage', orderId, order?.stage_id],
+    queryFn: async () => (await api.get<Stage | null>(`/orders/${orderId}/prev-stage`)).data,
+    enabled: Boolean(order?.can_move_back),
+  })
+
   useEffect(() => {
     if (!Number.isFinite(orderId)) return
     socket.join(`order:${orderId}`)
@@ -132,12 +138,6 @@ export default function OrderPage() {
 
   const canEdit = can('order.edit') || can('order.rename')
   const showChatTab = !order.is_closed || order.unread_messages > 0 || tab === 'chat'
-
-  const orderedStages = stages
-    .filter((s) => s.kind !== 'success' && s.kind !== 'fail')
-    .sort((a, b) => a.sort - b.sort)
-  const prevStageIdx = orderedStages.findIndex((s) => s.id === order.stage_id)
-  const prevStage = prevStageIdx > 0 ? orderedStages[prevStageIdx - 1] : null
 
   async function saveInline(payload: OrderUpdatePayload) {
     try {
@@ -853,7 +853,7 @@ function InfoTab({
                           </td>
                         </tr>
                       )}
-                      {section.fields.map((lf) =>
+                      {section.fields.filter((lf) => !lf.is_hidden).map((lf) =>
                         lf.kind === 'system' ? (
                           SYSTEM_ROW_RENDERERS[lf.field_ref]?.() ?? null
                         ) : lf.custom_field ? (
@@ -1603,7 +1603,7 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
                                 </div>
                               </div>
                               <button
-                                className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#2a3140]"
+                                className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#2a3140] dark:hover:text-[#e6e9ee]"
                                 title="Yuklab olish"
                                 onClick={() => download(f.url, f.name)}
                               >
@@ -1732,7 +1732,7 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
                                       </div>
                                     </div>
                                     <button
-                                      className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#2a3140]"
+                                      className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#2a3140] dark:hover:text-[#e6e9ee]"
                                       title="Yuklab olish"
                                       onClick={() => download(f.url, f.name)}
                                     >
@@ -1762,16 +1762,68 @@ function FilesTab({ order, onChange, isActive }: { order: OrderDetail; onChange:
 function HistoryTab({ orderId }: { orderId: number }) {
   const nm = useNm()
   const t = useT()
+  const lang = useLang((s) => s.lang)
   const { data = [], isLoading } = useQuery({
     queryKey: ['order-history', orderId],
     queryFn: async () => (await api.get<StageHistory[]>(`/orders/${orderId}/history`)).data,
   })
 
+  const summary = useMemo(() => {
+    const map = new Map<
+      string,
+      { stage_id: number; name_ru: string; name_uz: string; who: string; seconds: number; count: number }
+    >()
+    for (const h of data) {
+      if (h.duration_sec == null) continue
+      const who = h.responsible ? h.responsible.full_name : '—'
+      const key = `${h.stage_id}:${who}`
+      if (!map.has(key)) {
+        map.set(key, {
+          stage_id: h.stage_id, name_ru: h.stage_name_ru, name_uz: h.stage_name_uz,
+          who, seconds: 0, count: 0,
+        })
+      }
+      const e = map.get(key)!
+      e.seconds += h.duration_sec
+      e.count += 1
+    }
+    return [...map.values()].sort((a, b) => b.seconds - a.seconds)
+  }, [data])
+
   if (isLoading) return <Spinner />
   if (!data.length) return <Empty />
 
   return (
-    <div className="card p-4">
+    <div className="space-y-3">
+      {summary.length > 0 && (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
+              <tr>
+                <th className="px-3 py-2 font-medium">{lang === 'ru' ? 'Этап' : 'Bosqich'}</th>
+                <th className="px-3 py-2 font-medium">{lang === 'ru' ? 'Кто' : 'Kim'}</th>
+                <th className="px-3 py-2 font-medium">{lang === 'ru' ? 'Заходов' : 'Marta'}</th>
+                <th className="px-3 py-2 font-medium">{lang === 'ru' ? 'Время' : 'Vaqt'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.map((s) => (
+                <tr
+                  key={`${s.stage_id}:${s.who}`}
+                  className="border-t border-surface-border first:border-0 dark:border-[#2a3140]"
+                >
+                  <td className="px-3 py-1.5">{nm({ name_ru: s.name_ru, name_uz: s.name_uz }, 'name')}</td>
+                  <td className="px-3 py-1.5">{s.who}</td>
+                  <td className="px-3 py-1.5">{s.count}</td>
+                  <td className="px-3 py-1.5 font-medium">{duration(s.seconds)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="card p-4">
       <div className="space-y-0">
         {data.map((h, i) => (
           <div key={h.id} className="flex gap-3">
@@ -1809,6 +1861,7 @@ function HistoryTab({ orderId }: { orderId: number }) {
             </div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   )

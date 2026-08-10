@@ -314,18 +314,14 @@ export function FileFieldInput({
     })
   }
 
-  async function uploadFile(fileObj: File) {
+  async function uploadFile(fileObj: File): Promise<number> {
     const fd = new FormData()
     fd.append('file', fileObj)
     fd.append('entity', 'order')
     fd.append('entity_id', String(orderId ?? 0))
     const { data } = await api.post<FileOut>('/files', fd)
     setLocalFiles((prev) => new Map(prev).set(data.id, data))
-    if (multiple) {
-      onChange([...numericIds, data.id])
-    } else {
-      onChange([data.id])
-    }
+    return data.id
   }
 
   async function handlePick() {
@@ -334,8 +330,14 @@ export function FileFieldInput({
     setBusy(true)
     try {
       const max = multiple ? el.files.length : 1
+      // `numericIds` — shu render paytidagi holat; tsikl ichida ketma-ket
+      // yuklashda uni yangilab boramiz, aks holda har bir onChange avvalgi
+      // qo'shilgan faylni bekor qilib yuboradi (faqat oxirgisi qoladi)
+      let currentIds = multiple ? [...numericIds] : []
       for (let i = 0; i < max; i++) {
-        await uploadFile(el.files[i])
+        const newId = await uploadFile(el.files[i])
+        currentIds = multiple ? [...currentIds, newId] : [newId]
+        onChange(currentIds)
       }
     } catch {
       // silent
@@ -353,8 +355,11 @@ export function FileFieldInput({
     setBusy(true)
     try {
       const max = multiple ? droppedFiles.length : 1
+      let currentIds = multiple ? [...numericIds] : []
       for (let i = 0; i < max; i++) {
-        await uploadFile(droppedFiles[i])
+        const newId = await uploadFile(droppedFiles[i])
+        currentIds = multiple ? [...currentIds, newId] : [newId]
+        onChange(currentIds)
       }
     } catch {
       // silent

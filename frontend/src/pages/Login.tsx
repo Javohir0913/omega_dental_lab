@@ -52,7 +52,7 @@ export default function LoginPage() {
                 onClick={() => setLang(l)}
                 className={clsx(
                   'rounded-md px-2 py-0.5 text-xs uppercase transition-colors',
-                  lang === l ? 'bg-brand-500 text-white' : 'text-ink-faint hover:text-ink',
+                  lang === l ? 'bg-brand-500 text-white' : 'text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]',
                 )}
               >
                 {l}

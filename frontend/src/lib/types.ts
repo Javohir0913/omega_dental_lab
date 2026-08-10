@@ -9,6 +9,7 @@ export interface Role {
   is_active?: boolean
   default_session_limit?: number
   permissions?: Permission[]
+  move_stages?: Stage[]
 }
 
 export interface Permission {
@@ -32,6 +33,7 @@ export interface Stage {
   duration_hours: number | null
   allow_claim: boolean
   require_next_assignee: boolean
+  next_stage_ids: number[]
 }
 
 export interface ServiceItem {
@@ -217,6 +219,17 @@ export interface StageHistory {
   comment: string | null
 }
 
+export interface StageWorkRow {
+  user_id: number
+  user_name: string
+  stage_id: number
+  stage_name_ru: string
+  stage_name_uz: string
+  count: number
+  total_seconds: number
+  avg_seconds: number
+}
+
 export interface KanbanColumn {
   stage: Stage
   total: number
@@ -255,6 +268,7 @@ export interface LayoutField {
   label_ru: string
   label_uz: string
   custom_field: CustomField | null
+  is_hidden: boolean
 }
 
 export interface LayoutSection {

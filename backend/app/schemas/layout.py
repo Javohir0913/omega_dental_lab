@@ -41,6 +41,7 @@ class LayoutFieldOut(BaseModel):
     label_ru: str
     label_uz: str
     custom_field: CustomFieldOut | None = None
+    is_hidden: bool = False
 
 
 class LayoutSectionOut(BaseModel):
@@ -58,6 +59,7 @@ class LayoutSaveItem(BaseModel):
     section_id: int
     field_ref: str
     sort: int = 100
+    is_hidden: bool = False
 
 
 class LayoutSaveBody(BaseModel):

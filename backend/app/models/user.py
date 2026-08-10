@@ -32,6 +32,17 @@ user_stages = Table(
     Column("stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Rol qaysi bosqichlarga proyektni o'tkaza oladi.
+# Bosqich uchun bu yerda birorta ham qator bo'lmasa — cheklov yo'q (hammaga ochiq,
+# umumiy order.move.* huquqlari yetarli). Birorta rol qo'shilgan bo'lsa — shu
+# bosqichga faqat o'sha rol(lar)dagi foydalanuvchilar o'tkaza oladi.
+role_move_stages = Table(
+    "role_move_stages",
+    Base.metadata,
+    Column("role_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+)
+
 # Texnik qaysi xizmatlarni bajara oladi
 user_services = Table(
     "user_services",
@@ -67,6 +78,9 @@ class Role(Base, TimestampMixin):
 
     permissions: Mapped[list[Permission]] = relationship(
         secondary=role_permissions, lazy="selectin"
+    )
+    move_stages: Mapped[list["Stage"]] = relationship(  # noqa: F821
+        secondary=role_move_stages, lazy="selectin"
     )
     users: Mapped[list["User"]] = relationship(back_populates="role")
 

@@ -5,7 +5,7 @@ import { api, errText } from '@/lib/api'
 import { useLang, useNm, useT } from '@/i18n'
 import { Badge, Field, Modal, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
-import type { Permission, Role } from '@/lib/types'
+import type { Permission, Role, Stage } from '@/lib/types'
 
 export default function AdminRoles() {
   const t = useT()
@@ -15,6 +15,7 @@ export default function AdminRoles() {
 
   const [activeId, setActiveId] = useState<number | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [moveStageIds, setMoveStageIds] = useState<Set<number>>(new Set())
   const [dirty, setDirty] = useState(false)
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -27,12 +28,17 @@ export default function AdminRoles() {
     queryKey: ['permissions'],
     queryFn: async () => (await api.get<Permission[]>('/roles/permissions')).data,
   })
+  const { data: stages = [] } = useQuery({
+    queryKey: ['stages'],
+    queryFn: async () => (await api.get<Stage[]>('/stages')).data,
+  })
 
   const active = roles.find((r) => r.id === activeId) ?? roles[0] ?? null
 
   useEffect(() => {
     if (active) {
       setChecked(new Set((active.permissions ?? []).map((p) => p.code)))
+      setMoveStageIds(new Set((active.move_stages ?? []).map((s) => s.id)))
       setDirty(false)
     }
   }, [active?.id, roles])
@@ -66,11 +72,22 @@ export default function AdminRoles() {
     setDirty(true)
   }
 
+  function toggleStage(id: number) {
+    if (isSuper) return
+    const next = new Set(moveStageIds)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setMoveStageIds(next)
+    setDirty(true)
+  }
+
   async function save() {
     if (!active) return
     setBusy(true)
     try {
-      await api.patch(`/roles/${active.id}`, { permission_codes: [...checked] })
+      await api.patch(`/roles/${active.id}`, {
+        permission_codes: [...checked],
+        move_stage_ids: [...moveStageIds],
+      })
       toast(t('saved'))
       setDirty(false)
       qc.invalidateQueries({ queryKey: ['roles-admin'] })
@@ -190,6 +207,44 @@ export default function AdminRoles() {
                   </div>
                 )
               })}
+            </div>
+
+            <div className="card mt-3 p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-xs font-semibold">
+                  {lang === 'ru' ? 'Доступ к переходу на этапы' : 'Bosqichga o‘tkazish huquqi'}
+                </span>
+                <Badge>{moveStageIds.size}</Badge>
+              </div>
+              <p className="mb-2 text-[11px] text-ink-faint">
+                {lang === 'ru'
+                  ? 'Если для этапа не отмечена ни одна роль — переход на него открыт всем (как раньше). Если отмечена хотя бы одна роль — переходить туда сможет только она.'
+                  : 'Bosqich uchun birorta ham rol belgilanmagan bo‘lsa — unga o‘tish hammaga ochiq (avvalgidek). Kamida bitta rol belgilansa — faqat o‘sha rol(lar) o‘tkaza oladi.'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {stages.map((s) => {
+                  const on = moveStageIds.has(s.id)
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={isSuper}
+                      onClick={() => toggleStage(s.id)}
+                      className={clsx(
+                        'chip border transition-all',
+                        !isSuper && 'cursor-pointer',
+                      )}
+                      style={{
+                        backgroundColor: on ? `${s.color}22` : 'transparent',
+                        borderColor: on ? s.color : '#e4e7ec',
+                        color: on ? s.color : '#8d96a3',
+                      }}
+                    >
+                      {nm(s, 'name')}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </>
         )}

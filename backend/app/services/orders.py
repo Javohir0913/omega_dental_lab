@@ -20,6 +20,8 @@ from app.models import (
     Stage,
     StageKind,
     User,
+    role_move_stages,
+    stage_transitions,
 )
 from app.realtime.hub import hub
 from app.services import notify as notify_svc
@@ -106,6 +108,44 @@ def can_move_back(user: User, order: Order) -> bool:
     return True
 
 
+async def stage_access_allowed(db: AsyncSession, user: User, to_stage: Stage) -> bool:
+    """Bosqichga o'tkazish rol bo'yicha cheklanganmi — «Роли и права» dagi sozlamadan.
+
+    Agar bosqich uchun birorta ham rolga ruxsat berilmagan bo'lsa — cheklovsiz
+    (hammaga ochiq). Birorta rol berilgan bo'lsa — faqat o'sha rol(lar)dagi
+    foydalanuvchilar shu bosqichga o'tkaza oladi (super_admin va order.move.any
+    bundan mustasno)."""
+    if user.is_super or user.has_perm("order.move.any"):
+        return True
+    res = await db.execute(
+        select(role_move_stages.c.role_id).where(role_move_stages.c.stage_id == to_stage.id)
+    )
+    allowed_role_ids = {row[0] for row in res.all()}
+    if not allowed_role_ids:
+        return True
+    return user.role_id in allowed_role_ids
+
+
+async def transition_allowed(db: AsyncSession, user: User, from_stage_id: int, to_stage_id: int) -> bool:
+    """Bosqichdan-bosqichga o'tish «Этапы и канбан» dagi sozlamadan cheklanganmi.
+
+    Agar `from_stage_id`dan hech qanday nishon bosqich sozlanmagan bo'lsa —
+    cheklovsiz (istalgan bosqichga o'tish mumkin, hozirgidek). Sozlangan bo'lsa —
+    faqat ko'rsatilgan nishon bosqichlarga o'tish mumkin (super_admin va
+    order.move.any bundan mustasno)."""
+    if user.is_super or user.has_perm("order.move.any"):
+        return True
+    res = await db.execute(
+        select(stage_transitions.c.to_stage_id).where(
+            stage_transitions.c.from_stage_id == from_stage_id
+        )
+    )
+    allowed_ids = {row[0] for row in res.all()}
+    if not allowed_ids:
+        return True
+    return to_stage_id in allowed_ids
+
+
 def can_edit(user: User, order: Order) -> bool:
     """Proyekt maydonlarini tahrirlash. Agar boshqa odamga tayinlangan bo'lsa,
     alohida `order.edit.others` huquqi kerak."""
@@ -185,6 +225,39 @@ async def close_history(db: AsyncSession, order: Order, comment: str | None = No
     if comment:
         row.comment = comment
     await db.flush()
+
+
+async def previous_stage(db: AsyncSession, order: Order) -> Stage | None:
+    """«Вернуть назад» uchun nishon bosqichni marshrut tarixidan (OrderStageHistory)
+    topadi — statik katalog tartibi emas, haqiqiy o'tilgan yo'l bo'yicha.
+
+    Oddiy «oxirgi yopilgan yozuv» — orqaga qaytarilgan zahoti o'ziga yangi yozuv
+    ochib qo'yadi va keyingi «orqaga» bosilganda o'sha yozuvni «oldingi» deb olib,
+    ikki bosqich orasida abadiy pinpong qiladi. Shuning uchun butun tarix
+    xronologik tartibda qayta o'ynatiladi va oddiy undo-stek simulyatsiya qilinadi:
+    har bir o'tish oldingi bosqichni stekka qo'shadi, agar u stek tepasidagi
+    bosqichga qaytish bo'lsa — stekdan olib tashlaydi. Natijada «orqaga» tugmasi
+    orqaga ketma-ket bosilganda haqiqiy yo'l bo'ylab izchil orqaga qaytaveradi."""
+    res = await db.execute(
+        select(OrderStageHistory.stage_id)
+        .where(OrderStageHistory.order_id == order.id)
+        .order_by(OrderStageHistory.entered_at.asc())
+    )
+    seq = [row[0] for row in res.all()]
+    if len(seq) < 2:
+        return None
+
+    stack: list[int] = []
+    for i in range(1, len(seq)):
+        prev_id, curr_id = seq[i - 1], seq[i]
+        if stack and stack[-1] == curr_id:
+            stack.pop()
+        else:
+            stack.append(prev_id)
+
+    if not stack:
+        return None
+    return await get_stage(db, stack[-1])
 
 
 async def last_responsible_at_stage(

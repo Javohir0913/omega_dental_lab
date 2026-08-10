@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -105,16 +105,6 @@ export default function OrdersPage() {
   const items = data?.items ?? []
   const pages = trash ? 1 : Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? 30)))
 
-  const orderedStages = useMemo(
-    () => stages.filter((s) => s.kind !== 'success' && s.kind !== 'fail').sort((a, b) => a.sort - b.sort),
-    [stages],
-  )
-  function prevStageOf(order: OrderCard): Stage | null {
-    const idx = orderedStages.findIndex((s) => s.id === order.stage_id)
-    if (idx <= 0) return null
-    return orderedStages[idx - 1]
-  }
-
   function refreshOrders() {
     qc.invalidateQueries({ queryKey: ['orders'] })
   }
@@ -140,9 +130,9 @@ export default function OrdersPage() {
   }
 
   async function handleMoveBack(order: OrderCard) {
-    const stage = prevStageOf(order)
-    if (!stage) return
     try {
+      const stage = (await api.get<Stage | null>(`/orders/${order.id}/prev-stage`)).data
+      if (!stage) return
       await api.post(`/orders/${order.id}/move`, { stage_id: stage.id })
       refreshOrders()
       toast(`${order.number} → ${nm(stage, 'name')}`)
@@ -245,7 +235,7 @@ export default function OrdersPage() {
                   {stageIds.length > 0 && (
                     <div className="border-t border-surface-border px-2 py-1.5 dark:border-[#2f3745]">
                       <button
-                        className="text-xs text-ink-faint hover:text-ink"
+                        className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]"
                         onClick={() => { setStageIds([]); setPage(1) }}
                       >
                         {t('all')}
@@ -287,7 +277,7 @@ export default function OrdersPage() {
                 />
                 {(closedFrom || closedTo) && (
                   <button
-                    className="text-xs text-ink-faint hover:text-ink"
+                    className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]"
                     onClick={() => { setClosedFrom(''); setClosedTo(''); setPage(1) }}
                   >
                     {t('all')}
@@ -360,7 +350,6 @@ export default function OrdersPage() {
               order={o}
               onOpen={() => navigate(`/orders/${o.id}`)}
               onClaim={() => handleClaim(o)}
-              prevStage={prevStageOf(o)}
               onMoveBack={() => handleMoveBack(o)}
               onPause={() => setPauseTarget(o)}
               onResume={() => setResumeTarget(o)}

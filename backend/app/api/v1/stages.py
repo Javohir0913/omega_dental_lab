@@ -4,13 +4,33 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from app.core.deps import CurrentUser, DbDep, require
-from app.models import LogCategory, Order, Stage, StageKind, User
+from app.models import LogCategory, Order, Stage, StageKind, User, stage_transitions
 from app.realtime.hub import hub
 from app.schemas.catalog import StageCreate, StageOut, StageReorder, StageUpdate
 from app.schemas.common import Msg
 from app.services.logger import log_activity
 
 router = APIRouter(prefix="/stages", tags=["stages"])
+
+
+async def _stage_out(db, stage: Stage) -> StageOut:  # noqa: ANN001
+    res = await db.execute(
+        select(stage_transitions.c.to_stage_id).where(stage_transitions.c.from_stage_id == stage.id)
+    )
+    out = StageOut.model_validate(stage)
+    out.next_stage_ids = [row[0] for row in res.all()]
+    return out
+
+
+async def _set_next_stages(db, stage_id: int, next_stage_ids: list[int]) -> None:  # noqa: ANN001
+    """`stage_transitions` qatorlarini to'g'ridan-to'g'ri (ORM relationship'siz)
+    almashtiradi — self-referential lazy-load async muammolarini oldini olish uchun."""
+    await db.execute(stage_transitions.delete().where(stage_transitions.c.from_stage_id == stage_id))
+    if next_stage_ids:
+        await db.execute(
+            stage_transitions.insert(),
+            [{"from_stage_id": stage_id, "to_stage_id": tid} for tid in set(next_stage_ids)],
+        )
 
 
 @router.get("", response_model=list[StageOut])
@@ -20,7 +40,19 @@ async def list_stages(db: DbDep, user: CurrentUser, include_inactive: bool = Fal
     if not include_inactive:
         q = q.where(Stage.is_active.is_(True))
     res = await db.execute(q.order_by(Stage.sort, Stage.id))
-    return [StageOut.model_validate(s) for s in res.scalars().all()]
+    stages = list(res.scalars().all())
+
+    res = await db.execute(select(stage_transitions.c.from_stage_id, stage_transitions.c.to_stage_id))
+    next_map: dict[int, list[int]] = {}
+    for from_id, to_id in res.all():
+        next_map.setdefault(from_id, []).append(to_id)
+
+    out = []
+    for s in stages:
+        item = StageOut.model_validate(s)
+        item.next_stage_ids = next_map.get(s.id, [])
+        out.append(item)
+    return out
 
 
 @router.post("", response_model=StageOut, status_code=201)
@@ -34,9 +66,15 @@ async def create_stage(
     if res.scalar_one_or_none() is not None:
         raise HTTPException(409, "stage_code_taken")
 
-    stage = Stage(**body.model_dump(), kind=StageKind.WORK)
+    data = body.model_dump()
+    next_stage_ids = data.pop("next_stage_ids")
+
+    stage = Stage(**data, kind=StageKind.WORK)
     db.add(stage)
     await db.flush()
+
+    if next_stage_ids:
+        await _set_next_stages(db, stage.id, next_stage_ids)
 
     await log_activity(
         db,
@@ -52,7 +90,7 @@ async def create_stage(
     await db.commit()
     await db.refresh(stage)
     await hub.publish("kanban", "stages.changed", {})
-    return StageOut.model_validate(stage)
+    return await _stage_out(db, stage)
 
 
 @router.patch("/{stage_id}", response_model=StageOut)
@@ -69,6 +107,7 @@ async def update_stage(
         raise HTTPException(404, "stage_not_found")
 
     data = body.model_dump(exclude_unset=True)
+    next_stage_ids = data.pop("next_stage_ids", None)
 
     # Tizim ustunlari (Новый / Успех / Провал) o'chirilmaydi va yashirilmaydi —
     # nomi, rangi, tartibi esa o'zgartirilishi mumkin.
@@ -78,6 +117,9 @@ async def update_stage(
     changes = {k: {"from": getattr(stage, k), "to": v} for k, v in data.items()}
     for k, v in data.items():
         setattr(stage, k, v)
+
+    if next_stage_ids is not None:
+        await _set_next_stages(db, stage.id, next_stage_ids)
 
     if data.get("is_active") is False:
         res = await db.execute(
@@ -103,7 +145,7 @@ async def update_stage(
     await db.commit()
     await db.refresh(stage)
     await hub.publish("kanban", "stages.changed", {})
-    return StageOut.model_validate(stage)
+    return await _stage_out(db, stage)
 
 
 @router.post("/reorder", response_model=Msg)

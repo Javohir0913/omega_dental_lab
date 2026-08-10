@@ -283,7 +283,7 @@ export default function OrderForm({
                   {lang === 'ru' ? section.name_ru : section.name_uz}
                 </div>
               )}
-              {section.fields.map((lf) =>
+              {section.fields.filter((lf) => !lf.is_hidden).map((lf) =>
                 lf.kind === 'system' ? (
                   SYSTEM_RENDERERS[lf.field_ref]?.() ?? null
                 ) : lf.custom_field ? (
@@ -436,7 +436,7 @@ function ServiceMultiSelect({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="absolute right-2.5 text-xs text-ink-faint hover:text-ink"
+            className="absolute right-2.5 text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]"
           >
             {open ? '▲' : '▼'}
           </button>

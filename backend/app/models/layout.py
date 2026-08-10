@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -35,3 +35,5 @@ class OrderFieldLayout(Base, TimestampMixin):
     )
     field_ref: Mapped[str] = mapped_column(String(64))
     sort: Mapped[int] = mapped_column(Integer, default=100)
+    # loyiha yaratish formasi va Info tabida umuman ko'rsatilmasin
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)

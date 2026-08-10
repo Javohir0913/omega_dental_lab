@@ -29,6 +29,7 @@ from app.models import (
     StageKind,
     User,
 )
+from app.schemas.catalog import StageOut
 from app.schemas.common import Msg, Page
 from app.schemas.order import (
     FileOut,
@@ -758,6 +759,15 @@ async def trash_orders(
 # --------------------------------------------------------------------------
 
 
+@router.get("/{order_id}/prev-stage", response_model=StageOut | None)
+async def order_prev_stage(order_id: int, db: DbDep, user: CurrentUser):
+    """«Вернуть назад» uchun: proyekt haqiqatda oldin qaysi bosqichda bo'lganini
+    marshrut tarixidan qaytaradi (statik katalog tartibi emas)."""
+    order = await _get_order(db, order_id, user)
+    stage = await svc.previous_stage(db, order)
+    return StageOut.model_validate(stage) if stage else None
+
+
 @router.post("/{order_id}/move", response_model=OrderDetail)
 async def move_order(
     order_id: int,
@@ -776,6 +786,10 @@ async def move_order(
     from_stage_id = order.stage_id
     is_backward = to_stage.sort < order.stage.sort
     allowed = svc.can_move_back(user, order) if is_backward else svc.can_move(user, order)
+    if allowed:
+        allowed = await svc.stage_access_allowed(db, user, to_stage)
+    if allowed:
+        allowed = await svc.transition_allowed(db, user, from_stage_id, to_stage.id)
 
     if not allowed:
         await log_activity(

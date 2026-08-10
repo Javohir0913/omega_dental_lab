@@ -314,6 +314,8 @@ export const dict: Dict = {
   trash: { ru: 'Корзина', uz: 'Savat' },
   restore: { ru: 'Восстановить', uz: 'Tiklash' },
   deleted_at: { ru: 'Удалён', uz: "O'chirilgan" },
+  closed_from: { ru: 'Закрыт с', uz: 'Yopilgan (dan)' },
+  closed_to: { ru: 'Закрыт по', uz: 'Yopilgan (gacha)' },
   order_restored: { ru: 'Проект восстановлен', uz: 'Proyekt tiklandi' },
   order_deleted_undo: { ru: 'Проект перемещён в корзину', uz: 'Proyekt savatga tashlandi' },
 }

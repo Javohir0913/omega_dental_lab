@@ -34,6 +34,8 @@ export default function OrdersPage() {
     localStorage.setItem('omega_orders_closed', v)
     setPage(1)
   }
+  const [closedFrom, setClosedFrom] = useState('')
+  const [closedTo, setClosedTo] = useState('')
   const [trash, setTrash] = useState(false)
   const [view, setViewState] = useState<'table' | 'card'>(
     () => (localStorage.getItem('omega_orders_view') as 'table' | 'card') || 'table',
@@ -64,10 +66,12 @@ export default function OrdersPage() {
   const successStageId = stages.find((s) => s.kind === 'success')?.id
   const failStageId = stages.find((s) => s.kind === 'fail')?.id
 
+  const closedDateActive = closed === 'success' || closed === 'fail'
+
   const { data, isLoading } = useQuery({
     queryKey: trash
       ? ['trash-orders', q, page]
-      : ['orders', q, stageIds, closed, page, successStageId, failStageId],
+      : ['orders', q, stageIds, closed, closedDateActive ? closedFrom : '', closedDateActive ? closedTo : '', page, successStageId, failStageId],
     enabled: trash ? true : closed === '' || closed === 'active' || closed === 'paused' || (closed === 'success' && !!successStageId) || (closed === 'fail' && !!failStageId),
     queryFn: async () => {
       if (trash) {
@@ -88,6 +92,10 @@ export default function OrdersPage() {
       } else if (closed === 'fail' && failStageId) {
         p.is_closed = true
         p.stage_id = [failStageId]
+      }
+      if (closedDateActive) {
+        if (closedFrom) p.closed_from = `${closedFrom}T00:00:00`
+        if (closedTo) p.closed_to = `${closedTo}T23:59:59`
       }
       const res = await api.get<Page<OrderCard>>('/orders', { params: p })
       return res.data
@@ -259,6 +267,34 @@ export default function OrdersPage() {
               <option value="success">{stages.find((s) => s.kind === 'success') ? nm(stages.find((s) => s.kind === 'success')!, 'name') : 'Успех'}</option>
               <option value="fail">{stages.find((s) => s.kind === 'fail') ? nm(stages.find((s) => s.kind === 'fail')!, 'name') : 'Провал'}</option>
             </select>
+
+            {closedDateActive && (
+              <>
+                <input
+                  type="date"
+                  className="input max-w-[145px]"
+                  title={t('closed_from')}
+                  value={closedFrom}
+                  onChange={(e) => { setClosedFrom(e.target.value); setPage(1) }}
+                />
+                <span className="text-xs text-ink-faint">—</span>
+                <input
+                  type="date"
+                  className="input max-w-[145px]"
+                  title={t('closed_to')}
+                  value={closedTo}
+                  onChange={(e) => { setClosedTo(e.target.value); setPage(1) }}
+                />
+                {(closedFrom || closedTo) && (
+                  <button
+                    className="text-xs text-ink-faint hover:text-ink"
+                    onClick={() => { setClosedFrom(''); setClosedTo(''); setPage(1) }}
+                  >
+                    {t('all')}
+                  </button>
+                )}
+              </>
+            )}
           </>
         )}
 

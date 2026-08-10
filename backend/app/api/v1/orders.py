@@ -433,6 +433,8 @@ async def list_orders(
     doctor_id: int | None = None,
     is_closed: bool | None = None,
     paused: bool | None = None,
+    closed_from: datetime | None = None,
+    closed_to: datetime | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
@@ -451,6 +453,10 @@ async def list_orders(
         query = query.where(Order.is_closed.is_(is_closed))
     if paused is not None:
         query = query.where(Order.is_paused.is_(paused))
+    if closed_from:
+        query = query.where(Order.closed_at >= closed_from)
+    if closed_to:
+        query = query.where(Order.closed_at <= closed_to)
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
     res = await db.execute(

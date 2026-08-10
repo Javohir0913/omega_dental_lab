@@ -45,6 +45,14 @@
   html.dark .card-hover {
     @apply hover:border-[#38445a];
   }
+  /* Pauzadagi buyurtma — .card ning dark fonini bosib o'tishi uchun shu yerda,
+     tenglashtirilgan specificity bilan e'lon qilingan */
+  .card-paused {
+    @apply bg-amber-100;
+  }
+  html.dark .card-paused {
+    @apply bg-amber-900/45;
+  }
 
   .btn {
     @apply inline-flex select-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2

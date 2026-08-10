@@ -48,7 +48,7 @@ export const dict: Dict = {
   session_lost: { ru: 'Сессия завершена, войдите заново', uz: 'Sessiya tugadi, qayta kiring' },
 
   // navigatsiya
-  nav_kanban: { ru: 'Канбан', uz: 'Kanban' },
+  nav_kanban: { ru: 'Процессы', uz: 'Jarayonlar' },
   nav_orders: { ru: 'Проекты', uz: 'Proyektlar' },
   nav_patients: { ru: 'Пациенты', uz: 'Patsentlar' },
   nav_doctors: { ru: 'Врачи', uz: 'Vrachlar' },

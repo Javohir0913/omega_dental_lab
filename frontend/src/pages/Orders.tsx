@@ -383,6 +383,7 @@ export default function OrdersPage() {
                     className={clsx(
                       'border-b border-surface-border last:border-0 dark:border-[#2a3140]',
                       !trash && 'cursor-pointer hover:bg-surface-muted dark:hover:bg-[#222836]',
+                      o.is_paused && 'bg-amber-100 dark:bg-amber-900/45',
                     )}
                   >
                     <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-ink-faint">

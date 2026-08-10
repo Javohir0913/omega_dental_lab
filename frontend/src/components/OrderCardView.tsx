@@ -67,7 +67,7 @@ export function CardBody({
       className={clsx(
         'card cursor-pointer p-2.5 transition-shadow hover:shadow-pop',
         order.is_paused
-          ? 'border-l-2 border-l-slate-400 bg-slate-50 dark:bg-[#1c2028]'
+          ? 'card-paused border-l-2 border-l-amber-400'
           : order.is_overdue && 'border-l-2 border-l-rose-400',
       )}
       style={order.color && !order.is_paused ? { borderLeft: `3px solid ${order.color}` } : undefined}

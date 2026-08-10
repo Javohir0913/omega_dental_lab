@@ -59,4 +59,5 @@ DEFAULT_SETTINGS: dict[str, tuple[dict, str]] = {
         {"v": {str(q * 10 + n): str(q * 10 + n) for q in (1, 2, 3, 4) for n in range(1, 9)}},
         "Отображаемые номера зубов (ключ — код FDI, значение — что показывать)",
     ),
+    "tooth_chart_scale": ({"v": 100}, "Размер клеток на схеме зубов, % (общий для всех)"),
 }

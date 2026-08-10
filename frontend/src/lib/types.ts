@@ -34,6 +34,7 @@ export interface Stage {
   allow_claim: boolean
   require_next_assignee: boolean
   next_stage_ids: number[]
+  incoming_stage_ids: number[]
 }
 
 export interface ServiceItem {

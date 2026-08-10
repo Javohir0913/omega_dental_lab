@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import clsx from 'clsx'
 
 // FDI (xalqaro) tartibida: har qatorda o'ng yarim, keyin chap yarim (o'rtada jag' chizig'i)
@@ -9,104 +10,87 @@ export const LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38]
 const UPPER_ORDER = [...UPPER_RIGHT, ...UPPER_LEFT]
 const LOWER_ORDER = [...LOWER_RIGHT, ...LOWER_LEFT]
 
-// Har bir tish turi FDI kodining oxirgi raqami bilan aniqlanadi (kvadrantdan qat'i nazar bir xil):
-// 1-2 kurak tish (incisor), 3 qoziq tish (canine), 4-5 kichik oziq tish (premolar), 6-8 katta oziq tish (molar)
-type ToothKind = 'incisor' | 'canine' | 'premolar' | 'molar'
+const BASE_SCALE = 2.6
+// Admin → Общие настройки → Номера зубов dagi kabi — har bir katakcha bir xil o'lchamda
+const LOCAL_SIZE = 16
+const GAP = 5
+const LOCAL_CX = LOCAL_SIZE / 2
+const LOCAL_CY = LOCAL_SIZE / 2
 
-function toothKind(code: number): ToothKind {
-  const pos = code % 10
-  if (pos <= 2) return 'incisor'
-  if (pos === 3) return 'canine'
-  if (pos <= 5) return 'premolar'
-  return 'molar'
-}
-
-const SCALE = 1.3
-// Har bir tish shaklining haqiqiy (scale qo'llangandan keyingi) kengligi — qadam hajmini shunga mos hisoblash uchun
-const SLOT_WIDTH: Record<ToothKind, number> = {
-  incisor: 8 * SCALE,
-  canine: 9 * SCALE,
-  premolar: 12 * SCALE,
-  molar: 16 * SCALE,
-}
-// 1-5 (kurak/qoziq/kichik oziq) orasi, 6-7-8 (katta oziq) orasidan kamroq bo'shliq
-const GAP_FRONT = 3.5
-const GAP_BACK = 7
-
-const ARCH_CY_UPPER = 90
-const ARCH_CY_LOWER = 130
-const ARCH_RY = 74
-
-/**
- * Har bir tishga X ni kenglik+bo'shliqqa qarab ketma-ket (hech qachon ustma-ust tushmaydigan)
- * qo'yadi, so'ng Y ni HAQIQIY ellips tenglamasidan olinadi (y = cy ± RY*sqrt(1-(x/a)^2)) —
- * shu sababli natija har doim aniq oval (jag') shaklida bo'ladi, X esa xavfsiz nazorat qilinadi.
- */
-function ellipseRow(order: number[], cy: number, curveSign: 1 | -1) {
-  const kinds = order.map(toothKind)
-  const widths = kinds.map((k) => SLOT_WIDTH[k])
+function straightRow(order: number[], cy: number, slot: number) {
   const n = order.length
-
-  let cursor = 0
+  const total = n * slot + (n - 1) * GAP
   const centers: number[] = []
   for (let i = 0; i < n; i++) {
-    if (i > 0) {
-      const back = kinds[i - 1] === 'molar' || kinds[i] === 'molar'
-      cursor += back ? GAP_BACK : GAP_FRONT
-    }
-    centers.push(cursor + widths[i] / 2)
-    cursor += widths[i]
+    centers.push(i * (slot + GAP) + slot / 2)
   }
-  const total = cursor
   const halfWidth = total / 2
+  const mid = n / 2
+  const midX = (centers[mid - 1] + centers[mid]) / 2 - halfWidth
 
   return {
     total,
-    positions: order.map((code, i) => {
-      const xOffset = centers[i] - halfWidth
-      const ratio = Math.max(-1, Math.min(1, xOffset / halfWidth))
-      const y = cy + curveSign * ARCH_RY * Math.sqrt(1 - ratio * ratio)
-      return { code, x: xOffset, y }
-    }),
+    midX,
+    positions: order.map((code, i) => ({ code, x: centers[i] - halfWidth, y: cy })),
   }
 }
 
-const upperRow = ellipseRow(UPPER_ORDER, ARCH_CY_UPPER, -1)
-const lowerRow = ellipseRow(LOWER_ORDER, ARCH_CY_LOWER, 1)
+/**
+ * Butun sxema joylashuvi — Admin → Общие настройки dagi «Размер зубов»
+ * foizi (scalePercent, hammaga umumiy) ga qarab qayta hisoblanadi.
+ * Oddiy to'g'ri qator (aylana/oval emas), tartib — massivda qanday yozilgan
+ * bo'lsa (UPPER_RIGHT+UPPER_LEFT, LOWER_RIGHT+LOWER_LEFT) shunday qoladi.
+ */
+function buildLayout(scalePercent: number) {
+  const scale = BASE_SCALE * (scalePercent / 100)
+  const slot = LOCAL_SIZE * scale
+  const boxHalf = slot / 2
+  const rowCyUpper = 20
+  const rowCyLower = 20 + boxHalf * 2 + 26
 
-const CHART_WIDTH = Math.max(upperRow.total, lowerRow.total)
-const MARGIN_X = 26
-const MARGIN_TOP = 22
-const MARGIN_BOTTOM = 34
-const VIEW_W = CHART_WIDTH + MARGIN_X * 2
-const VIEW_MIN_Y = -MARGIN_TOP
-const VIEW_H = ARCH_CY_LOWER + ARCH_RY + MARGIN_BOTTOM + MARGIN_TOP
-const X_CENTER = VIEW_W / 2
+  const upperRow = straightRow(UPPER_ORDER, rowCyUpper, slot)
+  const lowerRow = straightRow(LOWER_ORDER, rowCyLower, slot)
 
-const UPPER_POS = upperRow.positions.map((p) => ({ ...p, x: p.x + X_CENTER }))
-const LOWER_POS = lowerRow.positions.map((p) => ({ ...p, x: p.x + X_CENTER }))
+  const chartWidth = Math.max(upperRow.total, lowerRow.total)
+  const marginX = 16
+  const marginTop = boxHalf + 14
+  const marginBottom = boxHalf + 14
+  const viewW = chartWidth + marginX * 2
+  const viewMinY = -marginTop
+  const viewH = rowCyLower + marginBottom + marginTop
+  const xCenter = viewW / 2
 
-// Har biri: tож (yuqorida, bo'yniqisqa toraygan) + ildiz (pastda) — haqiqiy tish siluetiga o'xshab
-const TOOTH_PATHS: Record<ToothKind, string> = {
-  // Kurak tish — tor, tekis kesuvchi qirra
-  incisor:
-    'M6,2 Q6,1 7,1 L13,1 Q14,1 14,2 L14,13 Q13.5,14.5 12.5,16 L11.5,25 Q10,26 8.5,25 L7.5,16 Q6.5,14.5 6,13 Z',
-  // Qoziq tish — bitta uchli cho'qqi
-  canine:
-    'M10,1 L13.5,6 Q14.5,9.5 14,13 Q13.5,14.5 12.5,16 L11.5,25 Q10,26 8.5,25 L7.5,16 Q6.5,14.5 6,13 Q5.5,9.5 6.5,6 Z',
-  // Kichik oziq tish — o'rtacha kenglikda, dumaloq tож
-  premolar:
-    'M4,7 Q4,1 10,1 Q16,1 16,7 L16,13 Q15.5,14.5 14.5,16 L12.5,25 Q10,26.5 7.5,25 L5.5,16 Q4.5,14.5 4,13 Z',
-  // Katta oziq tish — eng keng, ikki cho'qqili chaynov yuzasi
-  molar:
-    'M2,9 Q2,1 6,1.5 Q8,3.5 10,1.5 Q12,3.5 14,1.5 Q18,1 18,9 L18,13 Q17,15 15,16.5 L14,25 Q10,27 6,25 L5,16.5 Q3,15 2,13 Z',
+  return {
+    scale,
+    boxHalf,
+    rowCyUpper,
+    rowCyLower,
+    viewW,
+    viewMinY,
+    viewH,
+    upperPos: upperRow.positions.map((p) => ({ ...p, x: p.x + xCenter })),
+    lowerPos: lowerRow.positions.map((p) => ({ ...p, x: p.x + xCenter })),
+    upperMidX: upperRow.midX + xCenter,
+    lowerMidX: lowerRow.midX + xCenter,
+  }
 }
 
-const LOCAL_CX = 10
-const LOCAL_CY = 13
-
-function ToothShape({ kind, className }: { kind: ToothKind; className: string }) {
-  return <path d={TOOTH_PATHS[kind]} strokeWidth={1} strokeLinejoin="round" className={className} />
+// Tishning siluetiga o'xshatishga urinilmaydi — Admin → Общие настройки →
+// Номера зубовdagi kabi barcha katakchalar bir xil o'lchamda, oddiy dumaloq
+// burchakli kvadrat. Ustiga o'sha sozlamadan olingan yorliq (raqam) yoziladi.
+function ToothShape({ className }: { className: string }) {
+  return (
+    <rect
+      x={0}
+      y={0}
+      width={LOCAL_SIZE}
+      height={LOCAL_SIZE}
+      rx={3}
+      ry={3}
+      strokeWidth={1}
+      className={className}
+    />
+  )
 }
 
 function Tooth({
@@ -115,6 +99,7 @@ function Tooth({
   code,
   label,
   selected,
+  scale,
   onClick,
 }: {
   x: number
@@ -122,17 +107,17 @@ function Tooth({
   code: number
   label: string
   selected: boolean
+  scale: number
   onClick: () => void
 }) {
   return (
     <g
-      transform={`translate(${x - SCALE * LOCAL_CX}, ${y - SCALE * LOCAL_CY}) scale(${SCALE})`}
+      transform={`translate(${x - scale * LOCAL_CX}, ${y - scale * LOCAL_CY}) scale(${scale})`}
       onClick={onClick}
       className="cursor-pointer"
     >
       <title>{code}</title>
       <ToothShape
-        kind={toothKind(code)}
         className={clsx(
           'transition-colors',
           selected
@@ -141,11 +126,12 @@ function Tooth({
         )}
       />
       <text
-        x={10}
-        y={9.5}
+        x={LOCAL_CX}
+        y={LOCAL_CY}
         textAnchor="middle"
+        dominantBaseline="central"
         className={clsx(
-          'select-none text-[6px] font-semibold',
+          'select-none text-[6.5px] font-semibold',
           selected ? 'fill-white' : 'fill-ink-soft dark:fill-[#c8ced9]',
         )}
       >
@@ -159,19 +145,41 @@ export default function ToothChart({
   value,
   onChange,
   labels,
+  scalePercent = 100,
 }: {
   value: number[]
   onChange: (v: number[]) => void
   labels: Record<string, string>
+  scalePercent?: number
 }) {
+  const layout = useMemo(() => buildLayout(scalePercent), [scalePercent])
+
   function toggle(code: number) {
     onChange(value.includes(code) ? value.filter((c) => c !== code) : [...value, code].sort())
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg rounded-lg border border-surface-border bg-surface-muted/40 p-2 dark:border-[#2f3745]">
-      <svg viewBox={`0 ${VIEW_MIN_Y} ${VIEW_W} ${VIEW_H}`} className="w-full" role="img" aria-label="Tishlar chizmasi">
-        {UPPER_POS.map(({ code, x, y }) => (
+    <div className="mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-muted/40 p-2 dark:border-[#2f3745]">
+      <svg
+        viewBox={`0 ${layout.viewMinY} ${layout.viewW} ${layout.viewH}`}
+        className="w-full"
+        role="img"
+        aria-label="Tishlar chizmasi"
+      >
+        {/* O'ng va chap yarimni ajratuvchi chiziq — Admin → Общие настройки → Номера зубовdagi kabi */}
+        <line
+          x1={layout.upperMidX} x2={layout.upperMidX}
+          y1={layout.rowCyUpper - layout.boxHalf - 4} y2={layout.rowCyUpper + layout.boxHalf + 4}
+          strokeWidth={1}
+          className="stroke-surface-border dark:stroke-[#2f3745]"
+        />
+        <line
+          x1={layout.lowerMidX} x2={layout.lowerMidX}
+          y1={layout.rowCyLower - layout.boxHalf - 4} y2={layout.rowCyLower + layout.boxHalf + 4}
+          strokeWidth={1}
+          className="stroke-surface-border dark:stroke-[#2f3745]"
+        />
+        {layout.upperPos.map(({ code, x, y }) => (
           <Tooth
             key={code}
             x={x}
@@ -179,10 +187,11 @@ export default function ToothChart({
             code={code}
             label={labels[String(code)] ?? String(code)}
             selected={value.includes(code)}
+            scale={layout.scale}
             onClick={() => toggle(code)}
           />
         ))}
-        {LOWER_POS.map(({ code, x, y }) => (
+        {layout.lowerPos.map(({ code, x, y }) => (
           <Tooth
             key={code}
             x={x}
@@ -190,6 +199,7 @@ export default function ToothChart({
             code={code}
             label={labels[String(code)] ?? String(code)}
             selected={value.includes(code)}
+            scale={layout.scale}
             onClick={() => toggle(code)}
           />
         ))}

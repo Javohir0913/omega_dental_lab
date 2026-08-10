@@ -8,6 +8,7 @@ import { Field, Modal, SearchSelect } from '@/components/ui'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import ToothChart from '@/components/ToothChart'
 import { useToothLabels } from '@/lib/useToothLabels'
+import { useToothChartScale } from '@/lib/useToothChartScale'
 import { fromLocalInput, toLocalInput } from '@/lib/format'
 import { PatientForm } from '@/pages/Patients'
 import { DoctorForm } from '@/pages/Doctors'
@@ -36,6 +37,7 @@ export default function OrderForm({
   const qc = useQueryClient()
   const edit = Boolean(order)
   const toothLabels = useToothLabels()
+  const toothChartScale = useToothChartScale()
 
   const [title, setTitle] = useState(order?.title ?? '')
   const [teeth, setTeeth] = useState<number[]>(order?.teeth ?? [])
@@ -230,7 +232,7 @@ export default function OrderForm({
             'sys:teeth': () => (
               <div className="sm:col-span-2" key="sys:teeth">
                 <Field label={t('teeth')}>
-                  <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
+                  <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} scalePercent={toothChartScale} />
                 </Field>
               </div>
             ),

@@ -33,6 +33,7 @@ type SettingsValues = {
   telegram_digest_weekly_day?: number
   telegram_digest_weekly_time?: string
   tooth_labels?: Record<string, string>
+  tooth_chart_scale?: number
 }
 
 const WEEKDAYS: { value: number; key: string }[] = [
@@ -569,6 +570,25 @@ export default function AdminSettings() {
       <div className="rounded-lg border border-surface-border p-3 dark:border-[#2f3745]">
         <div className="mb-1 text-sm font-semibold">{t('setting_tooth_labels_title')}</div>
         <p className="mb-3 text-xs text-ink-faint">{t('setting_tooth_labels_hint')}</p>
+
+        <Field
+          label={lang === 'ru' ? 'Размер клеток на схеме (%)' : 'Sxemadagi katakcha o‘lchami (%)'}
+          hint={
+            lang === 'ru'
+              ? 'Один размер для всех сотрудников — меняется сразу везде (заявка, карточка проекта).'
+              : 'Barcha xodimlar uchun bitta o‘lcham — darhol hamma joyda (ariza, loyiha kartochkasi) o‘zgaradi.'
+          }
+        >
+          <input
+            type="number"
+            min={50}
+            max={300}
+            step={10}
+            className="input max-w-[140px]"
+            value={form.tooth_chart_scale ?? 100}
+            onChange={(e) => set('tooth_chart_scale', Number(e.target.value))}
+          />
+        </Field>
 
         <div className="flex flex-col items-center gap-3 overflow-x-auto">
           {[[UPPER_RIGHT, UPPER_LEFT], [LOWER_RIGHT, LOWER_LEFT]].map(([right, left], i) => (

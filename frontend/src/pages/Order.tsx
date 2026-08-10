@@ -18,6 +18,7 @@ import PhotoThumb from '@/components/PhotoThumb'
 import ToothChart from '@/components/ToothChart'
 import WorkCalendarNotice from '@/components/WorkCalendarNotice'
 import { useToothLabels } from '@/lib/useToothLabels'
+import { useToothChartScale } from '@/lib/useToothChartScale'
 import { dt, duration, fileSize, fromLocalInput, fromNow, toLocalInput } from '@/lib/format'
 import { RAW_EXTS } from '@/lib/fileTypes'
 import type {
@@ -378,6 +379,7 @@ function InfoTab({
   const t = useT()
   const lang = useLang((s) => s.lang)
   const toothLabels = useToothLabels()
+  const toothChartScale = useToothChartScale()
 
   const [title, setTitle] = useState(order.title)
   const [photoFileId, setPhotoFileId] = useState<number | null>(order.photo?.id ?? null)
@@ -718,7 +720,7 @@ function InfoTab({
                     <td colSpan={2} className="py-2">
                       <div className="mb-1.5 text-xs text-ink-faint">{t('teeth')}</div>
                       {canEdit ? (
-                        <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} />
+                        <ToothChart value={teeth} onChange={setTeeth} labels={toothLabels} scalePercent={toothChartScale} />
                       ) : (order.teeth ?? []).length > 0 ? (
                         (order.teeth ?? []).map((c) => toothLabels[String(c)] ?? String(c)).join(', ')
                       ) : (

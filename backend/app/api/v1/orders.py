@@ -302,6 +302,12 @@ async def tooth_labels(db: DbDep, _: CurrentUser):
     return await get_setting(db, "tooth_labels", DEFAULT_SETTINGS["tooth_labels"][0]["v"])
 
 
+@router.get("/tooth-chart-scale", response_model=int)
+async def tooth_chart_scale(db: DbDep, _: CurrentUser):
+    """Tish sxemasidagi katakchalar o'lchami (%, hammaga umumiy). Har qanday login qilgan foydalanuvchi ko'ra oladi."""
+    return await get_setting(db, "tooth_chart_scale", DEFAULT_SETTINGS["tooth_chart_scale"][0]["v"])
+
+
 @router.get("/work-calendar", response_model=WorkCalendarStatus)
 async def work_calendar_status(db: DbDep, _: CurrentUser):
     """Hozir bosqich vaqti ketyaptimi yoki to'xtaganmi (dam kuni/bayram/ish soatidan tashqari)."""
@@ -790,6 +796,8 @@ async def move_order(
         allowed = await svc.stage_access_allowed(db, user, to_stage)
     if allowed:
         allowed = await svc.transition_allowed(db, user, from_stage_id, to_stage.id)
+    if allowed:
+        allowed = await svc.incoming_allowed(db, user, from_stage_id, to_stage.id)
 
     if not allowed:
         await log_activity(

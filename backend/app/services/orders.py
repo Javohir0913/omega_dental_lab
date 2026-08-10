@@ -21,6 +21,7 @@ from app.models import (
     StageKind,
     User,
     role_move_stages,
+    stage_incoming,
     stage_transitions,
 )
 from app.realtime.hub import hub
@@ -144,6 +145,27 @@ async def transition_allowed(db: AsyncSession, user: User, from_stage_id: int, t
     if not allowed_ids:
         return True
     return to_stage_id in allowed_ids
+
+
+async def incoming_allowed(db: AsyncSession, user: User, from_stage_id: int, to_stage_id: int) -> bool:
+    """`transition_allowed`ning aksi — bosqichga qaysi bosqich(lar)dan KIRISH
+    mumkinligini tekshiradi («Этапы и канбан»dagi nishon bosqichning o'zida
+    sozlanadi). `to_stage_id` uchun manba ro'yxati sozlanmagan bo'lsa —
+    cheklovsiz. Boshqa bosqichlarning chiquvchi ro'yxatiga (transition_allowed)
+    tegmaydi — shu sabab, masalan, bitta bosqichni faqat bitta manbadan kirish
+    mumkin qilib qo'ysak ham, qolgan bosqichlarning o'zaro oddiy ish oqimi
+    buzilmaydi."""
+    if user.is_super or user.has_perm("order.move.any"):
+        return True
+    res = await db.execute(
+        select(stage_incoming.c.from_stage_id).where(
+            stage_incoming.c.to_stage_id == to_stage_id
+        )
+    )
+    allowed_ids = {row[0] for row in res.all()}
+    if not allowed_ids:
+        return True
+    return from_stage_id in allowed_ids
 
 
 def can_edit(user: User, order: Order) -> bool:

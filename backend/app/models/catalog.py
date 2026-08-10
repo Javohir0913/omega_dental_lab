@@ -16,6 +16,20 @@ stage_transitions = Table(
     Column("to_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Bosqichga qaysi bosqich(lar)dan KIRISH mumkinligini sozlash uchun — `stage_transitions`
+# dan mustaqil, teskari yo'nalish. `to_stage_id` uchun bu yerda birorta ham qator
+# bo'lmasa — u istalgan bosqichdan qabul qiladi (cheklovsiz, hozirgidek). Birorta
+# qator qo'shilsa — faqat o'sha ko'rsatilgan manba bosqich(lar)dan kirish mumkin.
+# Boshqa bosqichlarning o'z chiquvchi ro'yxatiga (stage_transitions) tegmaydi —
+# shu sabab, masalan, «Успех»ni faqat bitta bosqichdan kirish mumkin qilib qo'ysak
+# ham, qolgan bosqichlarning o'zaro oddiy ish oqimi buzilmaydi.
+stage_incoming = Table(
+    "stage_incoming",
+    Base.metadata,
+    Column("to_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+    Column("from_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class StageKind:
     """Kanban ustuni turi.

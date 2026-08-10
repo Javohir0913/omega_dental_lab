@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from app.core.deps import CurrentUser, DbDep, require
-from app.models import LogCategory, Order, Stage, StageKind, User, stage_transitions
+from app.models import LogCategory, Order, Stage, StageKind, User, stage_incoming, stage_transitions
 from app.realtime.hub import hub
 from app.schemas.catalog import StageCreate, StageOut, StageReorder, StageUpdate
 from app.schemas.common import Msg
@@ -19,6 +19,10 @@ async def _stage_out(db, stage: Stage) -> StageOut:  # noqa: ANN001
     )
     out = StageOut.model_validate(stage)
     out.next_stage_ids = [row[0] for row in res.all()]
+    res = await db.execute(
+        select(stage_incoming.c.from_stage_id).where(stage_incoming.c.to_stage_id == stage.id)
+    )
+    out.incoming_stage_ids = [row[0] for row in res.all()]
     return out
 
 
@@ -30,6 +34,16 @@ async def _set_next_stages(db, stage_id: int, next_stage_ids: list[int]) -> None
         await db.execute(
             stage_transitions.insert(),
             [{"from_stage_id": stage_id, "to_stage_id": tid} for tid in set(next_stage_ids)],
+        )
+
+
+async def _set_incoming_stages(db, stage_id: int, incoming_stage_ids: list[int]) -> None:  # noqa: ANN001
+    """`stage_incoming` qatorlarini to'g'ridan-to'g'ri (ORM relationship'siz) almashtiradi."""
+    await db.execute(stage_incoming.delete().where(stage_incoming.c.to_stage_id == stage_id))
+    if incoming_stage_ids:
+        await db.execute(
+            stage_incoming.insert(),
+            [{"to_stage_id": stage_id, "from_stage_id": fid} for fid in set(incoming_stage_ids)],
         )
 
 
@@ -47,10 +61,16 @@ async def list_stages(db: DbDep, user: CurrentUser, include_inactive: bool = Fal
     for from_id, to_id in res.all():
         next_map.setdefault(from_id, []).append(to_id)
 
+    res = await db.execute(select(stage_incoming.c.to_stage_id, stage_incoming.c.from_stage_id))
+    incoming_map: dict[int, list[int]] = {}
+    for to_id, from_id in res.all():
+        incoming_map.setdefault(to_id, []).append(from_id)
+
     out = []
     for s in stages:
         item = StageOut.model_validate(s)
         item.next_stage_ids = next_map.get(s.id, [])
+        item.incoming_stage_ids = incoming_map.get(s.id, [])
         out.append(item)
     return out
 
@@ -68,6 +88,7 @@ async def create_stage(
 
     data = body.model_dump()
     next_stage_ids = data.pop("next_stage_ids")
+    incoming_stage_ids = data.pop("incoming_stage_ids")
 
     stage = Stage(**data, kind=StageKind.WORK)
     db.add(stage)
@@ -75,6 +96,8 @@ async def create_stage(
 
     if next_stage_ids:
         await _set_next_stages(db, stage.id, next_stage_ids)
+    if incoming_stage_ids:
+        await _set_incoming_stages(db, stage.id, incoming_stage_ids)
 
     await log_activity(
         db,
@@ -108,6 +131,7 @@ async def update_stage(
 
     data = body.model_dump(exclude_unset=True)
     next_stage_ids = data.pop("next_stage_ids", None)
+    incoming_stage_ids = data.pop("incoming_stage_ids", None)
 
     # Tizim ustunlari (Новый / Успех / Провал) o'chirilmaydi va yashirilmaydi —
     # nomi, rangi, tartibi esa o'zgartirilishi mumkin.
@@ -120,6 +144,8 @@ async def update_stage(
 
     if next_stage_ids is not None:
         await _set_next_stages(db, stage.id, next_stage_ids)
+    if incoming_stage_ids is not None:
+        await _set_incoming_stages(db, stage.id, incoming_stage_ids)
 
     if data.get("is_active") is False:
         res = await db.execute(

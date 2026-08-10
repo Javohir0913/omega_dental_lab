@@ -1,5 +1,13 @@
 from app.db.base import Base
-from app.models.catalog import Doctor, Patient, Service, Stage, StageKind, stage_transitions
+from app.models.catalog import (
+    Doctor,
+    Patient,
+    Service,
+    Stage,
+    StageKind,
+    stage_incoming,
+    stage_transitions,
+)
 from app.models.chat import Chat, ChatMember, ChatType, Message
 from app.models.custom_field import (
     SYSTEM_ORDER_FIELDS,
@@ -31,7 +39,7 @@ from app.models.user import (
 
 __all__ = [
     "Base",
-    "Doctor", "Patient", "Service", "Stage", "StageKind", "stage_transitions",
+    "Doctor", "Patient", "Service", "Stage", "StageKind", "stage_incoming", "stage_transitions",
     "Chat", "ChatMember", "ChatType", "Message",
     "CustomField", "CustomFieldValue", "FieldEntity", "FieldType",
     "RequirementMoment", "StageRequirement", "SYSTEM_ORDER_FIELDS",

@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useNm, useT } from '@/i18n'
-import { Avatar, Badge, Empty, Field, Modal, Spinner } from '@/components/ui'
+import { Avatar, Badge, Empty, Field, Modal, PasswordInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import { dt, fromNow } from '@/lib/format'
 import type { Page, Role, ServiceItem, Stage, User, UserSessions } from '@/lib/types'
@@ -336,11 +336,9 @@ function UserForm({
 
         {!edit && (
           <Field label={t('password')} required hint="min. 5">
-            <input
-              type="text"
-              className="input"
+            <PasswordInput
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              onChange={(v) => setForm({ ...form, password: v })}
               autoComplete="new-password"
             />
           </Field>
@@ -495,14 +493,7 @@ function PasswordModal({ user, onClose }: { user: User; onClose: () => void }) {
       }
     >
       <Field label={t('new_password')} required hint="min. 5">
-        <input
-          type="text"
-          className="input"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          autoFocus
-          autoComplete="new-password"
-        />
+        <PasswordInput value={pwd} onChange={setPwd} autoFocus autoComplete="new-password" />
       </Field>
       <label className="flex cursor-pointer items-center gap-2 text-sm">
         <input type="checkbox" checked={logoutAll} onChange={(e) => setLogoutAll(e.target.checked)} />

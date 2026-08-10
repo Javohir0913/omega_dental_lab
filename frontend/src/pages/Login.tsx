@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/lib/auth'
 import { errText } from '@/lib/api'
 import { useLang, useT } from '@/i18n'
+import { PasswordInput } from '@/components/ui'
 import type { Lang } from '@/lib/types'
 
 export default function LoginPage() {
@@ -72,11 +73,9 @@ export default function LoginPage() {
 
           <div className="mb-4">
             <label className="label">{t('password')}</label>
-            <input
-              className="input"
-              type="password"
+            <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               autoComplete="current-password"
             />
           </div>

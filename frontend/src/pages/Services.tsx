@@ -89,7 +89,6 @@ export default function ServicesPage() {
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>
                 <th className="w-14" />
-                <th className="px-3 py-2 font-medium">Код</th>
                 <th className="px-3 py-2 font-medium">Название (RU)</th>
                 <th className="px-3 py-2 font-medium">Nomi (UZ)</th>
                 <th className="w-20" />
@@ -124,7 +123,6 @@ export default function ServicesPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[11px] text-ink-faint">{s.code ?? '—'}</td>
                   <td className="px-3 py-2 font-medium">{s.name_ru}</td>
                   <td className="px-3 py-2 text-ink-soft">{s.name_uz}</td>
                   <td className="px-3 py-2 text-right">
@@ -187,7 +185,6 @@ function ServiceForm({
   const t = useT()
   const lang = useLang((s) => s.lang)
   const [form, setForm] = useState({
-    code: service?.code ?? '',
     name_ru: service?.name_ru ?? '',
     name_uz: service?.name_uz ?? '',
     note: service?.note ?? '',
@@ -198,7 +195,7 @@ function ServiceForm({
 
   async function submit() {
     setBusy(true)
-    const body = { ...form, code: form.code || null, note: form.note || null }
+    const body = { ...form, note: form.note || null }
     try {
       if (service) await api.patch(`/services/${service.id}`, body)
       else await api.post('/services', body)
@@ -238,13 +235,6 @@ function ServiceForm({
           : 'Xizmatlarda narx yuritilmaydi — faqat nomi.'}
       </p>
 
-      <Field label="Код / Kod">
-        <input
-          className="input"
-          value={form.code}
-          onChange={(e) => setForm({ ...form, code: e.target.value })}
-        />
-      </Field>
       <Field label="Название (RU)" required>
         <input
           className="input"

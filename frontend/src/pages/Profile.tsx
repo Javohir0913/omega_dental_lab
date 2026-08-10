@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useNm, useT } from '@/i18n'
-import { Avatar, Badge, Empty, Field, Spinner } from '@/components/ui'
+import { Avatar, Badge, Empty, Field, PasswordInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import { dt, fromNow } from '@/lib/format'
 import type { UserSessions } from '@/lib/types'
@@ -117,22 +117,10 @@ export default function ProfilePage() {
         <div className="card p-4">
           <h2 className="mb-3 text-sm font-semibold">{t('change_password')}</h2>
           <Field label={t('old_password')}>
-            <input
-              type="password"
-              className="input"
-              value={oldPwd}
-              onChange={(e) => setOldPwd(e.target.value)}
-              autoComplete="current-password"
-            />
+            <PasswordInput value={oldPwd} onChange={setOldPwd} autoComplete="current-password" />
           </Field>
           <Field label={t('new_password')} hint="min. 5">
-            <input
-              type="password"
-              className="input"
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              autoComplete="new-password"
-            />
+            <PasswordInput value={newPwd} onChange={setNewPwd} autoComplete="new-password" />
           </Field>
           <button
             className="btn-primary"

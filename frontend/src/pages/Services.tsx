@@ -85,7 +85,7 @@ export default function ServicesPage() {
         <Empty />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="table-wide w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>
                 <th className="w-14" />

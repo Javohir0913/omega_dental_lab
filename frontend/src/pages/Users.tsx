@@ -76,7 +76,7 @@ export default function UsersPage() {
         <Empty />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="table-wide w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t('full_name')}</th>

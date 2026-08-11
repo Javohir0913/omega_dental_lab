@@ -153,24 +153,26 @@ export default function OrderPage() {
   return (
     <div className="mx-auto max-w-6xl p-4 pb-20">
       {/* Sarlavha */}
-      <div className="mb-3 flex flex-wrap items-start gap-3">
-        <button onClick={() => navigate(-1)} className="btn-ghost px-2">
-          ←
-        </button>
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <button onClick={() => navigate(-1)} className="btn-ghost shrink-0 px-2">
+            ←
+          </button>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-ink-faint">{order.number}</span>
-            {order.stage && (
-              <Badge color={order.stage.color}>{nm(order.stage, 'name')}</Badge>
-            )}
-            {order.is_paused && <Badge color="#64748b">{t('paused_badge')}</Badge>}
-            {!order.is_paused && order.is_overdue && <Badge color="#e11d48">{t('overdue')}</Badge>}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs text-ink-faint">{order.number}</span>
+              {order.stage && (
+                <Badge color={order.stage.color}>{nm(order.stage, 'name')}</Badge>
+              )}
+              {order.is_paused && <Badge color="#64748b">{t('paused_badge')}</Badge>}
+              {!order.is_paused && order.is_overdue && <Badge color="#e11d48">{t('overdue')}</Badge>}
+            </div>
+            <h1 className="mt-0.5 text-lg font-semibold leading-tight">{order.title}</h1>
           </div>
-          <h1 className="mt-0.5 text-lg font-semibold leading-tight">{order.title}</h1>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:shrink-0">
           {!order.is_closed && !order.is_paused && order.can_move && (
             <button className="btn-ghost" onClick={() => setShowPause(true)}>
               {t('pause')}
@@ -552,14 +554,18 @@ function InfoTab({
   const selectedServices = services?.filter((s) => serviceIds.includes(s.id)) ?? []
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="card overflow-x-auto p-4 lg:col-span-2">
-        <table className="w-full text-sm">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="card min-w-0 overflow-x-auto p-4 lg:col-span-2">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-20 sm:w-40" />
+            <col className="w-[calc(100%-5rem)] sm:w-[calc(100%-10rem)]" />
+          </colgroup>
           <tbody>
             {(() => {
               const inStageRow = (
                 <tr key="_in_stage" className="border-b border-surface-border dark:border-[#2a3140]">
-                  <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('in_stage')}</td>
+                  <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('in_stage')}</td>
                   <td className="py-2">
                     {order.stage_entered_at ? fromNow(order.stage_entered_at) : '—'}
                     {order.stage_remaining_seconds != null && (
@@ -579,7 +585,7 @@ function InfoTab({
               const SYSTEM_ROW_RENDERERS: Record<string, () => React.ReactNode> = {
                 'sys:title': () => (
                   <tr key="sys:title" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('order_title')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('order_title')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -591,7 +597,7 @@ function InfoTab({
                 ),
                 'sys:photo_file_id': () => (
                   <tr key="sys:photo_file_id" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">
                       {lang === 'ru' ? 'Фото проекта' : 'Proyekt rasmi'}
                     </td>
                     <td className="py-2">
@@ -613,7 +619,7 @@ function InfoTab({
                 ),
                 'sys:patient_id': () => (
                   <tr key="sys:patient_id" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('patient')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('patient')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <SearchSelect
@@ -634,7 +640,7 @@ function InfoTab({
                 ),
                 'sys:doctor_id': () => (
                   <tr key="sys:doctor_id" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('doctor')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('doctor')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <SearchSelect
@@ -653,7 +659,7 @@ function InfoTab({
                 ),
                 'sys:services': () => (
                   <tr key="sys:services" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('services')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('services')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <div className="relative">
@@ -732,7 +738,7 @@ function InfoTab({
                 'sys:responsible_id': () => (
                   <Fragment key="sys:responsible_id">
                     <tr className="border-b border-surface-border dark:border-[#2a3140]">
-                      <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('responsible')}</td>
+                      <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('responsible')}</td>
                       <td className="py-2">
                         {canEdit ? (
                           <div className="relative" ref={assignRef}>
@@ -810,7 +816,7 @@ function InfoTab({
                 ),
                 'sys:deadline': () => (
                   <tr key="sys:deadline" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('deadline')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('deadline')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <input type="datetime-local" className="input w-full max-w-[220px]" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
@@ -824,7 +830,7 @@ function InfoTab({
                 ),
                 'sys:priority': () => (
                   <tr key="sys:priority" className="border-b border-surface-border dark:border-[#2a3140]">
-                    <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{t('priority')}</td>
+                    <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('priority')}</td>
                     <td className="py-2">
                       {canEdit ? (
                         <input type="number" min={0} max={10} className="input w-20" value={priority} onChange={(e) => setPriority(e.target.value)} />
@@ -940,7 +946,7 @@ function CustomFieldRow({
   const label = lang === 'ru' ? f.label_ru : f.label_uz
   return (
     <tr className="border-b border-surface-border dark:border-[#2a3140]">
-      <td className="w-28 py-2 pr-3 align-top text-xs text-ink-faint sm:w-40">{label}</td>
+      <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{label}</td>
       <td className="py-2">
         {f.type === 'file' ? (
           /* Fayl maydonini har doim interaktiv ko'rsatamiz */
@@ -1799,7 +1805,7 @@ function HistoryTab({ orderId }: { orderId: number }) {
     <div className="space-y-3">
       {summary.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="table-wide w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>
                 <th className="px-3 py-2 font-medium">{lang === 'ru' ? 'Этап' : 'Bosqich'}</th>

@@ -125,7 +125,10 @@
       font-size: 16px;
     }
 
-    .card > table {
+    /* Ko'p ustunli jadvallar uchun — gorizontal skroll bilan o'qilishi uchun
+       eng kichik kenglik. Faqat shu klass qo'yilgan jadvallarga tegishli:
+       label/value ko'rinishidagi torroq jadvallar mobilda siqilib qolmasin. */
+    table.table-wide {
       min-width: 640px;
     }
   }

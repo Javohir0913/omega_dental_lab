@@ -140,7 +140,7 @@ export default function LogsPage() {
         <Empty />
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="table-wide w-full text-xs">
             <thead className="border-b border-surface-border text-left text-ink-faint dark:border-[#2a3140]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t('when')}</th>

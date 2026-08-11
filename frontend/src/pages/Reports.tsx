@@ -149,7 +149,7 @@ export default function ReportsPage() {
                     {e.totalCount} {lang === 'ru' ? 'этапов' : 'bosqich'} · {duration(e.totalSeconds)}
                   </span>
                 </div>
-                <table className="w-full text-sm">
+                <table className="table-wide w-full text-sm">
                   <thead className="text-left text-xs text-ink-faint">
                     <tr>
                       <th className="px-3 py-1.5 font-medium">{lang === 'ru' ? 'Этап' : 'Bosqich'}</th>

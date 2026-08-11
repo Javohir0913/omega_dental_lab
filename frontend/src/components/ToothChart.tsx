@@ -159,7 +159,7 @@ export default function ToothChart({
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl rounded-lg border border-surface-border bg-surface-muted/40 p-2 dark:border-[#2f3745]">
+    <div className="mx-auto w-full max-w-full sm:max-w-2xl rounded-lg border border-surface-border bg-surface-muted/40 p-2 dark:border-[#2f3745]">
       <svg
         viewBox={`0 ${layout.viewMinY} ${layout.viewW} ${layout.viewH}`}
         className="w-full"

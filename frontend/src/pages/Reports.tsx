@@ -142,7 +142,7 @@ export default function ReportsPage() {
 
           <div className="space-y-3">
             {employees.map((e) => (
-              <div key={e.user_id} className="card overflow-hidden">
+              <div key={e.user_id} className="card overflow-x-auto">
                 <div className="flex flex-wrap items-center gap-3 border-b border-surface-border px-3 py-2.5 dark:border-[#2a3140]">
                   <span className="text-sm font-medium">{e.user_name}</span>
                   <span className="text-xs text-ink-faint">

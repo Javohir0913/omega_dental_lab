@@ -84,7 +84,7 @@ export default function ServicesPage() {
       ) : list.length === 0 ? (
         <Empty />
       ) : (
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>

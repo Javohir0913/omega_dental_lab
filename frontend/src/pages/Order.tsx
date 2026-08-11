@@ -1798,7 +1798,7 @@ function HistoryTab({ orderId }: { orderId: number }) {
   return (
     <div className="space-y-3">
       {summary.length > 0 && (
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-surface-border text-left text-xs text-ink-faint dark:border-[#2a3140]">
               <tr>

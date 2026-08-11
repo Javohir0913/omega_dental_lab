@@ -17,6 +17,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { socket } from '@/lib/ws'
 import { useAuth } from '@/lib/auth'
+import { useIsMobile } from '@/lib/useMediaQuery'
 import { useLang, useNm, useT } from '@/i18n'
 import { toast } from '@/components/Toast'
 import { Modal, Spinner } from '@/components/ui'
@@ -122,6 +123,12 @@ export default function KanbanPage() {
   const [showFields, setShowFields] = useState(false)
   const fieldsRef = useRef<HTMLDivElement>(null)
 
+  const isMobile = useIsMobile()
+  const [showFilters, setShowFilters] = useState(false)
+  const [activeStageId, setActiveStageId] = useState<number | null>(null)
+  const [moveTarget, setMoveTarget] = useState<OrderCard | null>(null)
+  const activeFilterCount = [onlyMine, onlyFree, overdue, paused, workOnly, hideClosed].filter(Boolean).length
+
   const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue, paused }
 
   const { data, isLoading } = useQuery({
@@ -200,6 +207,17 @@ export default function KanbanPage() {
     })
   }, [columns, hideClosed])
 
+  // mobil: joriy tanlangan ustun endi ro'yxatda bo'lmasa — birinchisiga o'tamiz
+  useEffect(() => {
+    if (visibleColumns.length === 0) return
+    if (!visibleColumns.some((c) => c.stage.id === activeStageId)) {
+      setActiveStageId(visibleColumns[0].stage.id)
+    }
+  }, [visibleColumns, activeStageId])
+
+  const activeColumn = visibleColumns.find((c) => c.stage.id === activeStageId) ?? visibleColumns[0]
+  const allMoveStages = useMemo(() => allColumns.map((c) => c.stage), [allColumns])
+
   function onDragStart(e: DragStartEvent) {
     setDragging((e.active.data.current as { order: OrderCard })?.order ?? null)
   }
@@ -259,85 +277,127 @@ export default function KanbanPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       {/* Filtrlar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-surface-border bg-white px-3 py-2.5 dark:border-[#2a3140] dark:bg-[#171c26] sm:px-4">
-        <input
-          className="input w-full sm:max-w-[220px]"
-          placeholder={t('search')}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      <div className="border-b border-surface-border bg-white dark:border-[#2a3140] dark:bg-[#171c26]">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4">
+          <input
+            className="input min-w-0 flex-1 sm:max-w-[220px] sm:flex-initial"
+            placeholder={t('search')}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
 
-        {[
-          { on: onlyMine, set: setOnlyMine, label: t('only_mine') },
-          { on: onlyFree, set: setOnlyFree, label: t('only_free') },
-          { on: overdue, set: setOverdue, label: t('overdue') },
-          { on: paused, set: setPaused, label: t('paused_badge') },
-          { on: workOnly, set: setWorkOnly, label: lang === 'ru' ? 'В работе' : 'Ishda' },
-          { on: hideClosed, set: setHideClosed, label: lang === 'ru' ? 'Скрыть закрытые' : 'Yopiqni yashirish' },
-        ].map((f) => (
           <button
-            key={f.label}
-            onClick={() => f.set(!f.on)}
+            onClick={() => setShowFilters((v) => !v)}
             className={clsx(
-              'rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
-              f.on
+              'shrink-0 rounded-lg border px-2.5 py-1.5 text-xs transition-colors md:hidden',
+              showFilters || activeFilterCount > 0
                 ? 'border-brand-300 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/25'
                 : 'border-surface-border text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]',
             )}
           >
-            {f.label}
+            ⚙ {lang === 'ru' ? 'Фильтры' : 'Filtrlar'}
+            {activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
           </button>
-        ))}
 
-        <div className="flex-1" />
-
-        <WorkCalendarNotice />
-
-        <div className="relative" ref={fieldsRef}>
-          <button
-            className="rounded-lg border border-surface-border px-2.5 py-1.5 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
-            onClick={() => setShowFields((v) => !v)}
+          <div
+            className={clsx(
+              'w-full flex-wrap items-center gap-2 md:w-auto md:flex-1',
+              showFilters ? 'flex' : 'hidden',
+              'md:flex',
+            )}
           >
-            ⚙ {t('card_fields')}
-          </button>
+            {[
+              { on: onlyMine, set: setOnlyMine, label: t('only_mine') },
+              { on: onlyFree, set: setOnlyFree, label: t('only_free') },
+              { on: overdue, set: setOverdue, label: t('overdue') },
+              { on: paused, set: setPaused, label: t('paused_badge') },
+              { on: workOnly, set: setWorkOnly, label: lang === 'ru' ? 'В работе' : 'Ishda' },
+              { on: hideClosed, set: setHideClosed, label: lang === 'ru' ? 'Скрыть закрытые' : 'Yopiqni yashirish' },
+            ].map((f) => (
+              <button
+                key={f.label}
+                onClick={() => f.set(!f.on)}
+                className={clsx(
+                  'rounded-lg border px-2.5 py-1.5 text-xs transition-colors',
+                  f.on
+                    ? 'border-brand-300 bg-brand-50 font-medium text-brand-700 dark:bg-brand-900/25'
+                    : 'border-surface-border text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]',
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
 
-          {showFields && (
-            <div className="absolute right-0 top-full z-30 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
-              <div className="max-h-64 overflow-y-auto p-2">
-                {fieldDefs.map((f) => (
-                  <label
-                    key={f.key}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-muted dark:hover:bg-[#222836]"
-                  >
-                    <input
-                      type="checkbox"
-                      className="accent-brand-500"
-                      checked={visibility[f.key] !== false}
-                      onChange={() => toggle(f.key)}
-                    />
-                    {f.label}
-                  </label>
-                ))}
-              </div>
-              <div className="border-t border-surface-border px-2 py-1.5 dark:border-[#2f3745]">
-                <button className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]" onClick={showAll}>
-                  {t('all')}
-                </button>
-              </div>
+            <div className="hidden flex-1 md:block" />
+
+            <WorkCalendarNotice />
+
+            <div className="relative" ref={fieldsRef}>
+              <button
+                className="rounded-lg border border-surface-border px-2.5 py-1.5 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
+                onClick={() => setShowFields((v) => !v)}
+              >
+                ⚙ {t('card_fields')}
+              </button>
+
+              {showFields && (
+                <div className="absolute right-0 top-full z-30 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white shadow-pop dark:border-[#2f3745] dark:bg-[#1e2533]">
+                  <div className="max-h-64 overflow-y-auto p-2">
+                    {fieldDefs.map((f) => (
+                      <label
+                        key={f.key}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-muted dark:hover:bg-[#222836]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-brand-500"
+                          checked={visibility[f.key] !== false}
+                          onChange={() => toggle(f.key)}
+                        />
+                        {f.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="border-t border-surface-border px-2 py-1.5 dark:border-[#2f3745]">
+                    <button className="text-xs text-ink-faint hover:text-ink dark:hover:text-[#e6e9ee]" onClick={showAll}>
+                      {t('all')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+
+          <div className="ml-auto shrink-0 md:ml-0" />
+
+          {can('order.create') && (
+            <button className="btn-primary shrink-0" onClick={() => setCreating(true)}>
+              + {t('new_order')}
+            </button>
           )}
         </div>
-
-        {can('order.create') && (
-          <button className="btn-primary" onClick={() => setCreating(true)}>
-            + {t('new_order')}
-          </button>
-        )}
       </div>
 
       {/* Doska */}
       {isLoading ? (
         <Spinner />
+      ) : isMobile ? (
+        <MobileBoard
+          columns={visibleColumns}
+          activeColumn={activeColumn}
+          onSelectStage={setActiveStageId}
+          fields={visibility}
+          cfDefs={cardCustomFields}
+          onOpen={(o) => navigate(`/orders/${o.id}`)}
+          onClaim={claim}
+          onMoveBack={async (o) => {
+            const stage = (await api.get<Stage | null>(`/orders/${o.id}/prev-stage`)).data
+            if (stage) setMoveBack({ order: o, stage })
+          }}
+          onPause={setPauseTarget}
+          onResume={setResumeTarget}
+          onMove={setMoveTarget}
+        />
       ) : (
         <DndContext
           sensors={sensors}
@@ -486,6 +546,36 @@ export default function KanbanPage() {
         />
       )}
 
+      {moveTarget && (
+        <Modal open onClose={() => setMoveTarget(null)} title={t('move_to')}>
+          <div className="mb-3 text-xs text-ink-faint">
+            {moveTarget.number} · {moveTarget.title}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {allMoveStages
+              .filter((s) => s.id !== moveTarget.stage_id)
+              .map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={async () => {
+                    await tryMove(moveTarget, s)
+                    setMoveTarget(null)
+                  }}
+                  className="rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{
+                    background: `${s.color}1a`,
+                    border: `1px solid ${s.color}33`,
+                    color: s.color,
+                  }}
+                >
+                  {nm(s, 'name')}
+                </button>
+              ))}
+          </div>
+        </Modal>
+      )}
+
       {creating && (
         <OrderForm
           onClose={() => setCreating(false)}
@@ -495,6 +585,98 @@ export default function KanbanPage() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+/* ---------------- Mobil доска: bitta ustun + bosqichlar tab-strip ---------------- */
+
+function MobileBoard({
+  columns,
+  activeColumn,
+  onSelectStage,
+  fields,
+  cfDefs,
+  onOpen,
+  onClaim,
+  onMoveBack,
+  onPause,
+  onResume,
+  onMove,
+}: {
+  columns: KanbanColumn[]
+  activeColumn?: KanbanColumn
+  onSelectStage: (stageId: number) => void
+  fields: Record<string, boolean>
+  cfDefs: CustomField[]
+  onOpen: (o: OrderCard) => void
+  onClaim: (o: OrderCard) => void
+  onMoveBack: (o: OrderCard) => void
+  onPause: (o: OrderCard) => void
+  onResume: (o: OrderCard) => void
+  onMove: (o: OrderCard) => void
+}) {
+  const nm = useNm()
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-surface-border bg-white px-3 py-2 dark:border-[#2a3140] dark:bg-[#171c26]">
+        {columns.map((col) => {
+          const active = col.stage.id === activeColumn?.stage.id
+          return (
+            <button
+              key={col.stage.id}
+              onClick={() => onSelectStage(col.stage.id)}
+              className={clsx(
+                'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+                active ? 'text-white' : 'text-ink-soft',
+              )}
+              style={{
+                background: active ? col.stage.color : `${col.stage.color}14`,
+                border: `1px solid ${col.stage.color}${active ? '' : '33'}`,
+              }}
+            >
+              {nm(col.stage, 'name')}
+              <span
+                className={clsx(
+                  'rounded-full px-1.5 text-[10px]',
+                  active ? 'bg-white/25' : 'bg-black/5 dark:bg-white/10',
+                )}
+              >
+                {col.total}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {!activeColumn || activeColumn.orders.length === 0 ? (
+          <div className="grid h-full place-items-center text-sm text-ink-faint">—</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {activeColumn.orders.map((o) => (
+              <CardBody
+                key={o.id}
+                order={o}
+                fields={fields}
+                cfDefs={cfDefs}
+                onOpen={() => onOpen(o)}
+                onClaim={() => onClaim(o)}
+                onMoveBack={() => onMoveBack(o)}
+                onPause={() => onPause(o)}
+                onResume={() => onResume(o)}
+                onMove={() => onMove(o)}
+              />
+            ))}
+            {activeColumn.total > activeColumn.orders.length && (
+              <div className="py-1 text-center text-xs text-ink-faint">
+                +{activeColumn.total - activeColumn.orders.length}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

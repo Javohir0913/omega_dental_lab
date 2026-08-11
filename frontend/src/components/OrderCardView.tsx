@@ -16,6 +16,7 @@ export function CardBody({
   onMoveBack,
   onPause,
   onResume,
+  onMove,
 }: {
   order: OrderCard
   onOpen?: () => void
@@ -25,6 +26,8 @@ export function CardBody({
   onMoveBack?: () => void
   onPause?: () => void
   onResume?: () => void
+  /** Sudrab emas, bosib bosqich tanlash (mobil kanban) uchun. */
+  onMove?: () => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
@@ -122,6 +125,19 @@ export function CardBody({
               className="rounded p-0.5 text-ink-faint hover:bg-surface-muted hover:text-ink dark:hover:bg-[#242b38] dark:hover:text-[#e6e9ee]"
             >
               {t('pause')}
+            </button>
+          )}
+          {onMove && order.can_move && (
+            <button
+              type="button"
+              title={t('move_to')}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMove()
+              }}
+              className="rounded-md border border-surface-border px-1.5 py-0.5 text-[11px] font-medium text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#242b38]"
+            >
+              ⇄
             </button>
           )}
         </div>
@@ -271,6 +287,7 @@ export default function SortableCard({
   onMoveBack,
   onPause,
   onResume,
+  onMove,
 }: {
   order: OrderCard
   onOpen: () => void
@@ -280,6 +297,7 @@ export default function SortableCard({
   onMoveBack?: () => void
   onPause?: () => void
   onResume?: () => void
+  onMove?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: order.id,
@@ -304,6 +322,7 @@ export default function SortableCard({
         onMoveBack={onMoveBack}
         onPause={onPause}
         onResume={onResume}
+        onMove={onMove}
       />
     </div>
   )

@@ -34,6 +34,8 @@ from app.schemas.common import Msg, Page
 from app.schemas.order import (
     FileOut,
     KanbanColumn,
+    KanbanColumnPage,
+    KanbanCursor,
     KanbanOut,
     OrderAssign,
     OrderCard,
@@ -449,7 +451,7 @@ async def kanban(
     return KanbanOut(columns=columns)
 
 
-@router.get("/kanban/column", response_model=Page[OrderCard])
+@router.get("/kanban/column", response_model=KanbanColumnPage)
 async def kanban_column(
     db: DbDep,
     user: CurrentUser,
@@ -463,10 +465,20 @@ async def kanban_column(
     only_free: bool = False,
     overdue: bool = False,
     paused: bool = False,
-    offset: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    after_id: int | None = None,
+    after_closed_at: datetime | None = None,
+    after_priority: int | None = None,
+    after_sort: int | None = None,
 ):
-    """Kanban ustunidagi keyingi kartalarni sahifalab olish ("yana yuklash")."""
+    """Kanban ustunidagi keyingi kartalarni sahifalab olish ("yana yuklash").
+
+    Keyset (cursor) bo'yicha sahifalanadi — oldingi so'rovda qaytgan oxirgi
+    kartaning tartib maydonlari (`next_cursor`) shu yerga qaytarib beriladi.
+    Oddiy offset'dan farqli o'laroq, shu orada boshqa foydalanuvchi yangi
+    karta qo'shsa ham (masalan Success/Fail ustuniga), allaqachon yuklangan
+    kartalar takrorlanmaydi va tushib qolmaydi.
+    """
     stage = await db.get(Stage, stage_id)
     if stage is None:
         raise HTTPException(404, "stage_not_found")
@@ -476,16 +488,49 @@ async def kanban_column(
     )
     q_stage = base.where(Order.stage_id == stage_id)
     total = (await db.execute(select(func.count()).select_from(q_stage.subquery()))).scalar() or 0
-    q_stage = _kanban_order_by(q_stage, stage)
 
-    res = await db.execute(q_stage.offset(offset).limit(limit))
+    if stage.is_final:
+        if after_id is not None:
+            if after_closed_at is not None:
+                q_stage = q_stage.where(
+                    or_(
+                        Order.closed_at < after_closed_at,
+                        and_(Order.closed_at == after_closed_at, Order.id < after_id),
+                        Order.closed_at.is_(None),
+                    )
+                )
+            else:
+                q_stage = q_stage.where(Order.closed_at.is_(None), Order.id < after_id)
+        q_stage = q_stage.order_by(Order.closed_at.desc().nullslast(), Order.id.desc())
+    else:
+        if after_id is not None and after_priority is not None and after_sort is not None:
+            q_stage = q_stage.where(
+                or_(
+                    Order.priority > after_priority,
+                    and_(Order.priority == after_priority, Order.sort > after_sort),
+                    and_(
+                        Order.priority == after_priority,
+                        Order.sort == after_sort,
+                        Order.id < after_id,
+                    ),
+                )
+            )
+        q_stage = q_stage.order_by(Order.priority.asc(), Order.sort.asc(), Order.id.desc())
+
+    res = await db.execute(q_stage.limit(limit))
     rows = list(res.scalars().all())
-    return Page[OrderCard](
-        items=await _cards(db, rows, user),
-        total=total,
-        page=offset // limit + 1,
-        size=limit,
-    )
+
+    next_cursor = None
+    if len(rows) == limit:
+        last = rows[-1]
+        next_cursor = KanbanCursor(
+            id=last.id,
+            closed_at=last.closed_at if stage.is_final else None,
+            priority=last.priority if not stage.is_final else None,
+            sort=last.sort if not stage.is_final else None,
+        )
+
+    return KanbanColumnPage(items=await _cards(db, rows, user), total=total, next_cursor=next_cursor)
 
 
 # --------------------------------------------------------------------------

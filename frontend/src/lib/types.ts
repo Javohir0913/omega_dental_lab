@@ -152,6 +152,7 @@ export interface OrderCard {
   priority: number
   sort: number
   is_closed: boolean
+  closed_at: string | null
   color: string | null
   deadline: string | null
   stage_deadline: string | null
@@ -235,6 +236,13 @@ export interface KanbanColumn {
   stage: Stage
   total: number
   orders: OrderCard[]
+}
+
+export interface KanbanCursor {
+  id: number
+  closed_at: string | null
+  priority: number | null
+  sort: number | null
 }
 
 export interface CustomField {

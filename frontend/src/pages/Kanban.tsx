@@ -26,7 +26,7 @@ import MoveModal from '@/components/MoveModal'
 import PauseModal from '@/components/PauseModal'
 import OrderForm from '@/components/OrderForm'
 import WorkCalendarNotice from '@/components/WorkCalendarNotice'
-import type { KanbanColumn, OrderCard, RequirementError, Stage, CustomField } from '@/lib/types'
+import type { KanbanColumn, KanbanCursor, OrderCard, RequirementError, Stage, CustomField } from '@/lib/types'
 import { useCardFields } from '@/lib/useCardFields'
 
 function Column({
@@ -151,22 +151,47 @@ export default function KanbanPage() {
   // Ustunda "yana yuklash": har ustun uchun qo'shimcha yuklangan kartalar.
   // Qidiruv/filtr o'zgarsa — tozalanadi, oddiy real-time yangilanishda saqlanib qoladi.
   const [extra, setExtra] = useState<Record<number, OrderCard[]>>({})
+  const [cursors, setCursors] = useState<Record<number, KanbanCursor>>({})
   const [loadingMore, setLoadingMore] = useState<Record<number, boolean>>({})
   const paramsKey = JSON.stringify(params)
   useEffect(() => {
     setExtra({})
+    setCursors({})
   }, [paramsKey])
 
   async function loadMore(col: KanbanColumn) {
     const stageId = col.stage.id
     if (loadingMore[stageId]) return
-    const loaded = col.orders.length + (extra[stageId]?.length ?? 0)
+    // Keyset (cursor) bo'yicha: oldingi so'rovdan qaytgan cursor, yoki hali
+    // bo'lmasa — hozir ko'rinib turgan oxirgi kartadan hosil qilinadi. Offsetdan
+    // farqli o'laroq, shu orada ustunga yangi karta qo'shilib ketsa ham
+    // (masalan Success/Fail), allaqachon yuklangan kartalar buzilmaydi.
+    const last = col.orders[col.orders.length - 1]
+    const cursor = cursors[stageId] ?? (last && { id: last.id, closed_at: last.closed_at, priority: last.priority, sort: last.sort })
+    if (!cursor) return
     setLoadingMore((m) => ({ ...m, [stageId]: true }))
     try {
-      const res = await api.get<{ items: OrderCard[]; total: number }>('/orders/kanban/column', {
-        params: { stage_id: stageId, offset: loaded, limit: COLUMN_PAGE_SIZE, ...params },
-      })
+      const res = await api.get<{ items: OrderCard[]; total: number; next_cursor: KanbanCursor | null }>(
+        '/orders/kanban/column',
+        {
+          params: {
+            stage_id: stageId,
+            limit: COLUMN_PAGE_SIZE,
+            after_id: cursor.id,
+            after_closed_at: cursor.closed_at ?? undefined,
+            after_priority: cursor.priority ?? undefined,
+            after_sort: cursor.sort ?? undefined,
+            ...params,
+          },
+        },
+      )
       setExtra((e) => ({ ...e, [stageId]: [...(e[stageId] ?? []), ...res.data.items] }))
+      setCursors((c) => {
+        const n = { ...c }
+        if (res.data.next_cursor) n[stageId] = res.data.next_cursor
+        else delete n[stageId]
+        return n
+      })
     } catch (err) {
       toast(errText(err, lang), 'error')
     } finally {

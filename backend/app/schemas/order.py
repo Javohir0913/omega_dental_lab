@@ -39,6 +39,7 @@ class OrderCard(ORMModel):
     priority: int
     sort: int
     is_closed: bool
+    closed_at: datetime | None = None
     color: str | None = None
     deadline: datetime | None = None
     stage_deadline: datetime | None = None
@@ -169,3 +170,19 @@ class KanbanColumn(BaseModel):
 
 class KanbanOut(BaseModel):
     columns: list[KanbanColumn]
+
+
+class KanbanCursor(BaseModel):
+    id: int
+    closed_at: datetime | None = None
+    priority: int | None = None
+    sort: int | None = None
+
+
+class KanbanColumnPage(BaseModel):
+    """Kanban ustunini keyset (cursor) bo'yicha sahifalash — real-time o'zgarishlarda
+    kartalar takrorlanib yoki tushib qolmasligi uchun offset o'rniga ishlatiladi."""
+
+    items: list[OrderCard]
+    total: int
+    next_cursor: KanbanCursor | None = None

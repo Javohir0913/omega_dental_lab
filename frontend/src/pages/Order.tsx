@@ -6,7 +6,7 @@ import { api, API_URL, errText, tokens } from '@/lib/api'
 import { socket } from '@/lib/ws'
 import { useAuth } from '@/lib/auth'
 import { useLang, useNm, useT } from '@/i18n'
-import { Avatar, Badge, Confirm, Empty, Field, Modal, SearchSelect, Spinner, Tabs } from '@/components/ui'
+import { Avatar, Badge, Confirm, Empty, Field, Modal, NumberInput, SearchSelect, Spinner, Tabs } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import ChatPanel from '@/components/ChatPanel'
 import MoveModal from '@/components/MoveModal'
@@ -390,7 +390,7 @@ function InfoTab({
   const [serviceIds, setServiceIds] = useState<number[]>(order.services.map((s) => s.id))
   const [teeth, setTeeth] = useState<number[]>(order.teeth ?? [])
   const [deadline, setDeadline] = useState(toLocalInput(order.deadline))
-  const [priority, setPriority] = useState(String(order.priority))
+  const [priority, setPriority] = useState<number>(order.priority)
   const [description, setDescription] = useState(order.description ?? '')
   const [cf, setCf] = useState<Record<string, unknown>>({ ...order.custom_fields })
   const [saving, setSaving] = useState(false)
@@ -410,7 +410,7 @@ function InfoTab({
     setServiceIds(order.services.map((s) => s.id))
     setTeeth(order.teeth ?? [])
     setDeadline(toLocalInput(order.deadline))
-    setPriority(String(order.priority))
+    setPriority(order.priority)
     setDescription(order.description ?? '')
     setCf({ ...order.custom_fields })
     setPSearch('')
@@ -427,7 +427,7 @@ function InfoTab({
     JSON.stringify(serviceIds) !== JSON.stringify(order.services.map((s) => s.id)) ||
     JSON.stringify(teeth) !== JSON.stringify(order.teeth ?? []) ||
     deadline !== origDeadline ||
-    priority !== String(order.priority) ||
+    priority !== order.priority ||
     description !== (order.description ?? '') ||
     JSON.stringify(cf) !== JSON.stringify(order.custom_fields)
 
@@ -441,7 +441,7 @@ function InfoTab({
     if (JSON.stringify(serviceIds) !== JSON.stringify(order.services.map((s) => s.id))) payload.service_ids = serviceIds
     if (JSON.stringify(teeth) !== JSON.stringify(order.teeth ?? [])) payload.teeth = teeth
     if (deadline !== origDeadline) payload.deadline = fromLocalInput(deadline)
-    if (priority !== String(order.priority)) payload.priority = Number(priority)
+    if (priority !== order.priority) payload.priority = priority
     if (description !== (order.description ?? '')) payload.description = description || null
     if (JSON.stringify(cf) !== JSON.stringify(order.custom_fields)) payload.custom_fields = cf
     await onSave(payload)
@@ -467,7 +467,7 @@ function InfoTab({
     setServiceIds(order.services.map((s) => s.id))
     setTeeth(order.teeth ?? [])
     setDeadline(origDeadline)
-    setPriority(String(order.priority))
+    setPriority(order.priority)
     setDescription(order.description ?? '')
     setCf({ ...order.custom_fields })
     setPSearch('')
@@ -833,7 +833,7 @@ function InfoTab({
                     <td className="w-20 break-words py-2 pr-2 align-top text-xs text-ink-faint sm:w-40 sm:pr-3">{t('priority')}</td>
                     <td className="py-2">
                       {canEdit ? (
-                        <input type="number" min={0} max={10} className="input w-20" value={priority} onChange={(e) => setPriority(e.target.value)} />
+                        <NumberInput min={0} max={10} className="input w-20" value={priority} onChange={(v) => setPriority(v ?? 0)} />
                       ) : (
                         String(order.priority)
                       )}

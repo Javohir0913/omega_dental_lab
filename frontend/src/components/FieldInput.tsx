@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, API_URL, tokens } from '@/lib/api'
 import { useLang } from '@/i18n'
+import { NumberInput } from '@/components/ui'
 import type { CustomField, FileOut, Page, User } from '@/lib/types'
 import Model3DViewer from '@/components/Model3DViewer'
 import { MODEL3D_EXTS, fileExt, isImageName, isRawName } from '@/lib/fileTypes'
@@ -58,12 +59,11 @@ export function CustomFieldInput({
     case 'int':
     case 'decimal':
       return (
-        <input
-          type="number"
-          step={field.type === 'decimal' ? '0.01' : '1'}
+        <NumberInput
+          decimal={field.type === 'decimal'}
           className="input"
-          value={(value as number) ?? ''}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          value={value as number | null}
+          onChange={(v) => onChange(v)}
         />
       )
 

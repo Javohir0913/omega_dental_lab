@@ -99,6 +99,89 @@ export function Confirm({
 
 /* ---------------- Field ---------------- */
 
+/**
+ * Sonli input. Oddiy `<input type="number">` o'rniga ishlatiladi:
+ * React "number" inputni raqamli qiymat o'zgarmasa DOM'ni yangilamaydi
+ * (masalan "0" ustiga "1" bossangiz — matn "01" bo'lib qoladi, holat 1
+ * bo'lsa ham). Shu sabab bu yerda oddiy matn ko'rinishida ishlaydi va
+ * boshidagi nollarni o'zi tozalaydi.
+ */
+export function NumberInput({
+  value,
+  onChange,
+  min,
+  max,
+  decimal,
+  className,
+  placeholder,
+  disabled,
+}: {
+  value: number | null | undefined
+  onChange: (v: number | null) => void
+  min?: number
+  max?: number
+  decimal?: boolean
+  className?: string
+  placeholder?: string
+  disabled?: boolean
+}) {
+  const [text, setText] = useState(value == null ? '' : String(value))
+  const focused = useRef(false)
+
+  useEffect(() => {
+    // Fokusda bo'lganda tashqi `value` bilan sinxronlanmaymiz — aks holda
+    // ota-komponent odatiy "?? default" pattern ishlatsa, maydonni tozalab
+    // yangi son yozayotganda darhol eski qiymatga qaytib qolardi.
+    if (focused.current) return
+    setText(value == null ? '' : String(value))
+  }, [value])
+
+  function parseText(s: string): number | null {
+    if (s === '' || s === '-' || s === '.' || s === '-.') return null
+    const n = Number(s)
+    return Number.isNaN(n) ? null : n
+  }
+
+  function sanitize(raw: string): string {
+    let s = raw.replace(decimal ? /[^\d.-]/g : /[^\d-]/g, '')
+    const neg = s.startsWith('-')
+    s = s.replace(/-/g, '')
+    if (decimal) {
+      const dot = s.indexOf('.')
+      if (dot !== -1) s = s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '')
+    }
+    s = s.replace(/^0+(?=\d)/, '')
+    return (neg ? '-' : '') + s
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode={decimal ? 'decimal' : 'numeric'}
+      className={className}
+      placeholder={placeholder}
+      disabled={disabled}
+      value={text}
+      onFocus={() => {
+        focused.current = true
+      }}
+      onChange={(e) => {
+        const s = sanitize(e.target.value)
+        setText(s)
+        onChange(parseText(s))
+      }}
+      onBlur={() => {
+        focused.current = false
+        let n = parseText(text)
+        if (n != null && min != null && n < min) n = min
+        if (n != null && max != null && n > max) n = max
+        setText(n == null ? '' : String(n))
+        onChange(n)
+      }}
+    />
+  )
+}
+
 export function Field({
   label,
   required,

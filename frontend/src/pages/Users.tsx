@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useNm, useT } from '@/i18n'
-import { Avatar, Badge, Empty, Field, Modal, PasswordInput, Spinner } from '@/components/ui'
+import { Avatar, Badge, Empty, Field, Modal, NumberInput, PasswordInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import { dt, fromNow } from '@/lib/format'
 import type { Page, Role, ServiceItem, Stage, User, UserSessions } from '@/lib/types'
@@ -361,12 +361,11 @@ function UserForm({
         </Field>
 
         <Field label={t('session_limit')} hint={t('session_limit_hint')}>
-          <input
-            type="number"
+          <NumberInput
             min={0}
             className="input"
             value={form.session_limit}
-            onChange={(e) => setForm({ ...form, session_limit: Number(e.target.value) })}
+            onChange={(v) => setForm({ ...form, session_limit: v ?? 0 })}
           />
         </Field>
 

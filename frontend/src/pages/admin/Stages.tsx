@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useLang, useNm, useT } from '@/i18n'
-import { Badge, Confirm, Field, Modal, Spinner } from '@/components/ui'
+import { Badge, Confirm, Field, Modal, NumberInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import type { Stage } from '@/lib/types'
 
@@ -315,13 +315,10 @@ function StageForm({
                 : 'Necha soatdan keyin kechikkan hisoblanadi. Bo‘sh — normativsiz.'
             }
           >
-            <input
-              type="number"
+            <NumberInput
               className="input"
-              value={form.duration_hours}
-              onChange={(e) =>
-                setForm({ ...form, duration_hours: e.target.value === '' ? '' : Number(e.target.value) })
-              }
+              value={form.duration_hours === '' ? null : form.duration_hours}
+              onChange={(v) => setForm({ ...form, duration_hours: v ?? '' })}
             />
           </Field>
 

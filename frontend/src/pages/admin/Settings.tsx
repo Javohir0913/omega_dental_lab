@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useLang, useT } from '@/i18n'
-import { Confirm, Field, Spinner } from '@/components/ui'
+import { Confirm, Field, NumberInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import { UPPER_LEFT, UPPER_RIGHT, LOWER_LEFT, LOWER_RIGHT } from '@/components/ToothChart'
 import type { Holiday, Lang } from '@/lib/types'
@@ -57,8 +57,10 @@ export default function AdminSettings() {
   const [tgTestBusy, setTgTestBusy] = useState(false)
   const [tgTestResult, setTgTestResult] = useState<{ ok: boolean; username?: string } | null>(null)
 
-  const [holidayForm, setHolidayForm] = useState({
-    day: 1, month: 1, year: '', name_ru: '', name_uz: '',
+  const [holidayForm, setHolidayForm] = useState<{
+    day: number; month: number; year: number | null; name_ru: string; name_uz: string
+  }>({
+    day: 1, month: 1, year: null, name_ru: '', name_uz: '',
   })
   const [holidayBusy, setHolidayBusy] = useState(false)
   const [delHoliday, setDelHoliday] = useState<Holiday | null>(null)
@@ -109,12 +111,12 @@ export default function AdminSettings() {
       await api.post('/admin/holidays', {
         day: holidayForm.day,
         month: holidayForm.month,
-        year: holidayForm.year ? Number(holidayForm.year) : null,
+        year: holidayForm.year,
         name_ru: holidayForm.name_ru,
         name_uz: holidayForm.name_uz,
       })
       toast(t('saved'))
-      setHolidayForm({ day: 1, month: 1, year: '', name_ru: '', name_uz: '' })
+      setHolidayForm({ day: 1, month: 1, year: null, name_ru: '', name_uz: '' })
       qc.invalidateQueries({ queryKey: ['admin-holidays'] })
     } catch (e) {
       toast(errText(e, lang), 'error')
@@ -194,13 +196,12 @@ export default function AdminSettings() {
         </Field>
 
         <Field label={t('setting_order_number_padding')}>
-          <input
+          <NumberInput
             className="input"
-            type="number"
             min={1}
             max={12}
             value={form.order_number_padding ?? 6}
-            onChange={(e) => set('order_number_padding', Number(e.target.value))}
+            onChange={(v) => set('order_number_padding', v ?? 6)}
           />
         </Field>
       </div>
@@ -253,13 +254,12 @@ export default function AdminSettings() {
 
       <Field label={t('setting_log_retention')}>
         <div className="flex flex-wrap items-center gap-3">
-          <input
+          <NumberInput
             className="input w-24"
-            type="number"
             min={1}
             max={3650}
             value={form.log_retention_days ?? 90}
-            onChange={(e) => set('log_retention_days', Number(e.target.value))}
+            onChange={(v) => set('log_retention_days', v ?? 90)}
           />
           <span className="text-xs text-ink-faint">{t('days')}</span>
           <button className="btn-ghost text-xs text-rose-600" onClick={cleanupLogs} disabled={cleanupBusy}>
@@ -271,14 +271,13 @@ export default function AdminSettings() {
 
       <Field label={t('setting_max_upload')}>
         <div className="flex flex-wrap items-center gap-3">
-          <input
+          <NumberInput
             className="input w-24"
-            type="number"
             min={1}
             max={2048}
             disabled={!form.max_upload_mb}
             value={form.max_upload_mb || 25}
-            onChange={(e) => set('max_upload_mb', Number(e.target.value))}
+            onChange={(v) => set('max_upload_mb', v ?? 25)}
           />
           <span className="text-xs text-ink-faint">MB</span>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft">
@@ -354,25 +353,23 @@ export default function AdminSettings() {
           </Field>
 
           <Field label={t('setting_overdue_reminder_hours')}>
-            <input
+            <NumberInput
               className="input w-24"
-              type="number"
               min={1}
               max={720}
               value={form.overdue_reminder_hours ?? 24}
-              onChange={(e) => set('overdue_reminder_hours', Number(e.target.value))}
+              onChange={(v) => set('overdue_reminder_hours', v ?? 24)}
             />
             <div className="mt-1 text-xs text-ink-faint">{t('setting_overdue_reminder_hours_hint')}</div>
           </Field>
 
           <Field label={t('setting_order_deadline_reminder_hours')}>
-            <input
+            <NumberInput
               className="input w-24"
-              type="number"
               min={1}
               max={720}
               value={form.order_deadline_reminder_hours ?? 24}
-              onChange={(e) => set('order_deadline_reminder_hours', Number(e.target.value))}
+              onChange={(v) => set('order_deadline_reminder_hours', v ?? 24)}
             />
             <div className="mt-1 text-xs text-ink-faint">{t('setting_order_deadline_reminder_hours_hint')}</div>
           </Field>
@@ -412,30 +409,27 @@ export default function AdminSettings() {
         )}
 
         <div className="grid grid-cols-3 gap-2">
-          <input
+          <NumberInput
             className="input"
-            type="number"
             min={1}
             max={31}
             placeholder={t('holiday_day')}
             value={holidayForm.day}
-            onChange={(e) => setHolidayForm((p) => ({ ...p, day: Number(e.target.value) }))}
+            onChange={(v) => setHolidayForm((p) => ({ ...p, day: v ?? 1 }))}
           />
-          <input
+          <NumberInput
             className="input"
-            type="number"
             min={1}
             max={12}
             placeholder={t('holiday_month')}
             value={holidayForm.month}
-            onChange={(e) => setHolidayForm((p) => ({ ...p, month: Number(e.target.value) }))}
+            onChange={(v) => setHolidayForm((p) => ({ ...p, month: v ?? 1 }))}
           />
-          <input
+          <NumberInput
             className="input"
-            type="number"
             placeholder={t('holiday_year')}
             value={holidayForm.year}
-            onChange={(e) => setHolidayForm((p) => ({ ...p, year: e.target.value }))}
+            onChange={(v) => setHolidayForm((p) => ({ ...p, year: v }))}
           />
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -579,14 +573,12 @@ export default function AdminSettings() {
               : 'Barcha xodimlar uchun bitta o‘lcham — darhol hamma joyda (ariza, loyiha kartochkasi) o‘zgaradi.'
           }
         >
-          <input
-            type="number"
+          <NumberInput
             min={50}
             max={300}
-            step={10}
             className="input max-w-[140px]"
             value={form.tooth_chart_scale ?? 100}
-            onChange={(e) => set('tooth_chart_scale', Number(e.target.value))}
+            onChange={(v) => set('tooth_chart_scale', v ?? 100)}
           />
         </Field>
 

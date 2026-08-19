@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useLang, useNm, useT } from '@/i18n'
-import { Badge, Field, Modal, Spinner } from '@/components/ui'
+import { Badge, Field, Modal, NumberInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import type { Permission, Role, Stage } from '@/lib/types'
 
@@ -342,12 +342,11 @@ function RoleForm({
         />
       </Field>
       <Field label={t('session_limit')} hint={t('session_limit_hint')}>
-        <input
-          type="number"
+        <NumberInput
           min={0}
           className="input"
           value={form.default_session_limit}
-          onChange={(e) => setForm({ ...form, default_session_limit: Number(e.target.value) })}
+          onChange={(v) => setForm({ ...form, default_session_limit: v ?? 0 })}
         />
       </Field>
     </Modal>

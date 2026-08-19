@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
-import { Field, Modal, SearchSelect } from '@/components/ui'
+import { Field, Modal, NumberInput, SearchSelect } from '@/components/ui'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import ToothChart from '@/components/ToothChart'
 import { useToothLabels } from '@/lib/useToothLabels'
@@ -252,11 +252,10 @@ export default function OrderForm({
                 label={t('priority')}
                 hint={lang === 'ru' ? 'Меньше — выше в колонке' : 'Kam — ustunda tepada'}
               >
-                <input
-                  type="number"
+                <NumberInput
                   className="input"
                   value={priority}
-                  onChange={(e) => setPriority(Number(e.target.value))}
+                  onChange={(v) => setPriority(v ?? 500)}
                 />
               </Field>
             ),

@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { api, errText } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useLang, useT } from '@/i18n'
-import { Confirm, Empty, Field, Modal, Spinner } from '@/components/ui'
+import { Confirm, Empty, Field, Modal, NumberInput, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
 import type { ServiceItem } from '@/lib/types'
 
@@ -251,11 +251,10 @@ function ServiceForm({
         />
       </Field>
       <Field label="Сортировка">
-        <input
-          type="number"
+        <NumberInput
           className="input"
           value={form.sort}
-          onChange={(e) => setForm({ ...form, sort: Number(e.target.value) })}
+          onChange={(v) => setForm({ ...form, sort: v ?? 0 })}
         />
       </Field>
       {service && (

@@ -11,6 +11,8 @@ import { api } from '@/lib/api'
 import { socket } from '@/lib/ws'
 import { onChatMessage, patchChatRead } from '@/lib/chatUpdates'
 import type { ChatMessage, Lang } from '@/lib/types'
+import logoLight from '@/assets/logo-light-mode.png'
+import logoDark from '@/assets/logo-dark-mode.png'
 
 interface NavItem {
   to: string
@@ -124,9 +126,8 @@ export default function Layout() {
         )}
       >
         <div className="flex h-14 items-center gap-2 border-b border-surface-border px-3 dark:border-[#2a3140]">
-          <div className="grid h-7 w-7 shrink-0 place-items-center rounded bg-brand-500 text-xs font-bold text-white">
-            Ω
-          </div>
+          <img src={logoLight} alt="Omega Dental Lab" className="h-7 w-7 shrink-0 rounded-full dark:hidden" />
+          <img src={logoDark} alt="Omega Dental Lab" className="hidden h-7 w-7 shrink-0 rounded-full dark:block" />
           {!navCollapsed && (
             <div className="truncate text-sm font-semibold leading-tight">
               OMEGA

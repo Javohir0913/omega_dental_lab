@@ -6,6 +6,8 @@ import { errText } from '@/lib/api'
 import { useLang, useT } from '@/i18n'
 import { PasswordInput } from '@/components/ui'
 import type { Lang } from '@/lib/types'
+import logoLight from '@/assets/logo-light-mode.png'
+import logoDark from '@/assets/logo-dark-mode.png'
 
 export default function LoginPage() {
   const t = useT()
@@ -36,9 +38,8 @@ export default function LoginPage() {
     <div className="grid min-h-screen place-items-center bg-surface-muted p-4 dark:bg-[#131720]">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-brand-500 text-lg font-bold text-white">
-            Ω
-          </div>
+          <img src={logoLight} alt="Omega Dental Lab" className="mx-auto mb-3 h-16 w-16 rounded-full dark:hidden" />
+          <img src={logoDark} alt="Omega Dental Lab" className="mx-auto mb-3 hidden h-16 w-16 rounded-full dark:block" />
           <h1 className="text-lg font-semibold">OMEGA DENTAL LAB</h1>
           <p className="text-xs text-ink-faint">CRM</p>
         </div>

@@ -349,24 +349,18 @@ async def work_calendar_status(db: DbDep, _: CurrentUser):
 # --------------------------------------------------------------------------
 
 
-@router.get("/kanban", response_model=KanbanOut)
-async def kanban(
-    db: DbDep,
-    user: CurrentUser,
-    q: str | None = None,
-    responsible_id: int | None = None,
-    doctor_id: int | None = None,
-    patient_id: int | None = None,
-    service_id: int | None = None,
-    only_mine: bool = False,
-    only_free: bool = False,
-    overdue: bool = False,
-    paused: bool = False,
-    limit_per_column: int = Query(50, ge=5, le=200),
+def _kanban_base_query(
+    user: User,
+    q: str | None,
+    responsible_id: int | None,
+    doctor_id: int | None,
+    patient_id: int | None,
+    service_id: int | None,
+    only_mine: bool,
+    only_free: bool,
+    overdue: bool,
+    paused: bool,
 ):
-    """Kanban doskasi: ustunlar = bosqichlar, kartalar = proyektlar."""
-    stages = await svc.active_stages(db)
-
     base = select(Order).where(Order.deleted_at.is_(None))
     base = _visibility_filter(base, user)
     if q:
@@ -394,6 +388,42 @@ async def kanban(
         )
     if paused:
         base = base.where(Order.is_paused.is_(True))
+    return base
+
+
+def _kanban_order_by(q_stage, stage: Stage):  # noqa: ANN001
+    # yopiq ustunlarda (Успех/Провал) — eng yangilari, ish ustunlarida —
+    # prioritet bo'yicha (kam = tepada), keyin qo'lda surilgan tartib
+    if stage.is_final:
+        return q_stage.order_by(Order.closed_at.desc().nullslast(), Order.id.desc())
+    return q_stage.order_by(Order.priority.asc(), Order.sort.asc(), Order.id.desc())
+
+
+@router.get("/kanban", response_model=KanbanOut)
+async def kanban(
+    db: DbDep,
+    user: CurrentUser,
+    q: str | None = None,
+    responsible_id: int | None = None,
+    doctor_id: int | None = None,
+    patient_id: int | None = None,
+    service_id: int | None = None,
+    only_mine: bool = False,
+    only_free: bool = False,
+    overdue: bool = False,
+    paused: bool = False,
+    limit_per_column: int = Query(10, ge=5, le=200),
+):
+    """Kanban doskasi: ustunlar = bosqichlar, kartalar = proyektlar.
+
+    Har bir ustunda dastlab faqat `limit_per_column` ta karta qaytariladi —
+    qolganlari frontendda /orders/kanban/column orqali "yana yuklash" bilan olinadi,
+    shu sababli ustunda ko'p karta to'planib ketsa ham sahifa qotib qolmaydi.
+    """
+    stages = await svc.active_stages(db)
+    base = _kanban_base_query(
+        user, q, responsible_id, doctor_id, patient_id, service_id, only_mine, only_free, overdue, paused
+    )
 
     columns: list[KanbanColumn] = []
     from app.schemas.catalog import StageOut
@@ -404,12 +434,7 @@ async def kanban(
             await db.execute(select(func.count()).select_from(q_stage.subquery()))
         ).scalar() or 0
 
-        # yopiq ustunlarda (Успех/Провал) — eng yangilari, ish ustunlarida —
-        # prioritet bo'yicha (kam = tepada), keyin qo'lda surilgan tartib
-        if stage.is_final:
-            q_stage = q_stage.order_by(Order.closed_at.desc().nullslast(), Order.id.desc())
-        else:
-            q_stage = q_stage.order_by(Order.priority.asc(), Order.sort.asc(), Order.id.desc())
+        q_stage = _kanban_order_by(q_stage, stage)
 
         res = await db.execute(q_stage.limit(limit_per_column))
         rows = list(res.scalars().all())
@@ -422,6 +447,45 @@ async def kanban(
         )
 
     return KanbanOut(columns=columns)
+
+
+@router.get("/kanban/column", response_model=Page[OrderCard])
+async def kanban_column(
+    db: DbDep,
+    user: CurrentUser,
+    stage_id: int,
+    q: str | None = None,
+    responsible_id: int | None = None,
+    doctor_id: int | None = None,
+    patient_id: int | None = None,
+    service_id: int | None = None,
+    only_mine: bool = False,
+    only_free: bool = False,
+    overdue: bool = False,
+    paused: bool = False,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """Kanban ustunidagi keyingi kartalarni sahifalab olish ("yana yuklash")."""
+    stage = await db.get(Stage, stage_id)
+    if stage is None:
+        raise HTTPException(404, "stage_not_found")
+
+    base = _kanban_base_query(
+        user, q, responsible_id, doctor_id, patient_id, service_id, only_mine, only_free, overdue, paused
+    )
+    q_stage = base.where(Order.stage_id == stage_id)
+    total = (await db.execute(select(func.count()).select_from(q_stage.subquery()))).scalar() or 0
+    q_stage = _kanban_order_by(q_stage, stage)
+
+    res = await db.execute(q_stage.offset(offset).limit(limit))
+    rows = list(res.scalars().all())
+    return Page[OrderCard](
+        items=await _cards(db, rows, user),
+        total=total,
+        page=offset // limit + 1,
+        size=limit,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -677,7 +741,7 @@ async def update_order(
     await db.commit()
     await db.refresh(order)
 
-    if "title" in data or "doctor_id" in data:
+    if "title" in data or "doctor_id" in data or "patient_id" in data:
         await notify(db, NotifyEvent.ORDER_RENAMED, order=order, actor=user)
         await db.commit()
 

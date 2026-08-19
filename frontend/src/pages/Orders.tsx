@@ -45,6 +45,14 @@ export default function OrdersPage() {
     localStorage.setItem('omega_orders_view', v)
   }
   const [page, setPage] = useState(1)
+  const [size, setSizeState] = useState(
+    () => Number(localStorage.getItem('omega_orders_size')) || 30,
+  )
+  const setSize = (v: number) => {
+    setSizeState(v)
+    localStorage.setItem('omega_orders_size', String(v))
+    setPage(1)
+  }
   const [creating, setCreating] = useState(false)
   const [pauseTarget, setPauseTarget] = useState<OrderCard | null>(null)
   const [resumeTarget, setResumeTarget] = useState<OrderCard | null>(null)
@@ -71,7 +79,7 @@ export default function OrdersPage() {
   const { data, isLoading } = useQuery({
     queryKey: trash
       ? ['trash-orders', q, page]
-      : ['orders', q, stageIds, closed, closedDateActive ? closedFrom : '', closedDateActive ? closedTo : '', page, successStageId, failStageId],
+      : ['orders', q, stageIds, closed, closedDateActive ? closedFrom : '', closedDateActive ? closedTo : '', page, size, successStageId, failStageId],
     enabled: trash ? true : closed === '' || closed === 'active' || closed === 'paused' || (closed === 'success' && !!successStageId) || (closed === 'fail' && !!failStageId),
     queryFn: async () => {
       if (trash) {
@@ -81,7 +89,7 @@ export default function OrdersPage() {
       const p: Record<string, unknown> = {
         q: q || undefined,
         page,
-        size: 30,
+        size,
       }
       if (stageIds.length > 0) p.stage_id = stageIds
       if (closed === 'active') p.is_closed = false
@@ -103,7 +111,7 @@ export default function OrdersPage() {
   })
 
   const items = data?.items ?? []
-  const pages = trash ? 1 : Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? 30)))
+  const pages = trash ? 1 : Math.max(1, Math.ceil((data?.total ?? 0) / (data?.size ?? size)))
 
   function refreshOrders() {
     qc.invalidateQueries({ queryKey: ['orders'] })
@@ -476,21 +484,39 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {!trash && pages > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-2">
-          <button className="btn-ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            ←
-          </button>
-          <span className="text-xs text-ink-faint">
-            {page} / {pages}
-          </span>
-          <button
-            className="btn-ghost"
-            disabled={page >= pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            →
-          </button>
+      {!trash && (
+        <div className="mt-3 flex items-center justify-center gap-3">
+          {pages > 1 && (
+            <>
+              <button className="btn-ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                ←
+              </button>
+              <span className="text-xs text-ink-faint">
+                {page} / {pages}
+              </span>
+              <button
+                className="btn-ghost"
+                disabled={page >= pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                →
+              </button>
+            </>
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+            {lang === 'ru' ? 'На странице:' : 'Sahifada:'}
+            <select
+              className="input h-7 min-w-0 py-0 text-xs"
+              value={size}
+              onChange={(e) => setSize(Number(e.target.value))}
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
 

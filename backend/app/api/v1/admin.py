@@ -373,6 +373,7 @@ async def notify_meta(db: DbDep, _: Annotated[User, Depends(require("admin.notif
             ],
         ],
         placeholders=[
+            {"key": "{id}", "label_ru": "ID проекта (для ссылки)", "label_uz": "Proyekt ID (havola uchun)"},
             {"key": "{order_number}", "label_ru": "Номер проекта", "label_uz": "Proyekt raqami"},
             {"key": "{order_title}", "label_ru": "Название проекта", "label_uz": "Proyekt nomi"},
             {"key": "{stage}", "label_ru": "Текущий этап", "label_uz": "Joriy bosqich"},

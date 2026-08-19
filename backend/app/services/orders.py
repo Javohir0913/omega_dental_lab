@@ -552,6 +552,19 @@ async def move_to_stage(
         ctx={"stage_prev": from_stage.name_ru, "comment": comment or "—"},
     )
 
+    # Ko'chishda aniq mas'ul berilgan bo'lsa (masalan, "chiqishda majburiy maydon"
+    # sifatida) — bu ham tayinlash hisoblanadi, shuning uchun alohida bildirishnoma
+    # ketadi (assign() endpoint orqali tayinlanganda bo'lgani kabi).
+    if next_responsible_id and next_responsible_id != prev_responsible_id:
+        await notify_svc.notify(
+            db,
+            NotifyEvent.ORDER_ASSIGNED,
+            order=order,
+            actor=actor,
+            stage_id=to_stage.id,
+            prev_responsible_id=prev_responsible_id,
+        )
+
     skipped_ids = [uid for uid in skipped_ids if uid != actor.id]
     if is_backward and skipped_ids:
         await notify_svc.notify(

@@ -5,6 +5,7 @@ import { api, errText } from '@/lib/api'
 import { useLang, useNm, useT } from '@/i18n'
 import { Badge, Field, Spinner } from '@/components/ui'
 import { toast } from '@/components/Toast'
+import NotifyHelp from '@/components/NotifyHelp'
 import type { NotifyMeta, NotifyTemplate, Stage } from '@/lib/types'
 
 export default function AdminNotify() {
@@ -18,6 +19,7 @@ export default function AdminNotify() {
   const [form, setForm] = useState<Partial<NotifyTemplate>>({})
   const [busy, setBusy] = useState(false)
   const [activeField, setActiveField] = useState<'title_ru' | 'title_uz' | 'body_ru' | 'body_uz'>('body_ru')
+  const [showHelp, setShowHelp] = useState(false)
 
   const { data: meta, isLoading } = useQuery({
     queryKey: ['notify-meta'],
@@ -110,7 +112,22 @@ export default function AdminNotify() {
   const configured = new Set(templates.map((x) => x.event))
 
   return (
-    <div className="flex flex-col gap-4 md:flex-row">
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-sm font-semibold">{lang === 'ru' ? 'Уведомления' : 'Bildirishnomalar'}</h1>
+        <button
+          type="button"
+          className="btn-ghost flex items-center gap-1.5 text-xs"
+          onClick={() => setShowHelp(true)}
+        >
+          <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-current text-[10px] leading-none">?</span>
+          {lang === 'ru' ? 'Как это настроить' : 'Qanday sozlash'}
+        </button>
+      </div>
+
+      <NotifyHelp open={showHelp} onClose={() => setShowHelp(false)} />
+
+      <div className="flex flex-col gap-4 md:flex-row">
       {/* Hodisalar */}
       <div className="grid shrink-0 grid-cols-1 gap-1 sm:grid-cols-2 md:block md:w-60 md:space-y-1">
         {(meta?.events ?? []).map((e) => (
@@ -280,6 +297,7 @@ export default function AdminNotify() {
             {t('active')}
           </label>
         </div>
+      </div>
       </div>
     </div>
   )

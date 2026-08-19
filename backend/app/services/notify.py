@@ -308,6 +308,7 @@ def build_context(order: Order | None, actor: User | None, extra: dict | None) -
     if order is not None:
         ctx.update(
             {
+                "id": order.id,
                 "order_number": order.number,
                 "order_title": order.title,
                 "stage": order.stage.name_ru if order.stage else "—",

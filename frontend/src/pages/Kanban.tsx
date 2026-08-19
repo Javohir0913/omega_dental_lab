@@ -33,10 +33,12 @@ function Column({
   col,
   children,
   isOver,
+  onScrollEnd,
 }: {
   col: KanbanColumn
   children: React.ReactNode
   isOver: boolean
+  onScrollEnd?: () => void
 }) {
   const nm = useNm()
   const { setNodeRef } = useDroppable({ id: `stage-${col.stage.id}`, data: { stage: col.stage } })
@@ -53,6 +55,14 @@ function Column({
 
       <div
         ref={setNodeRef}
+        onScroll={
+          onScrollEnd
+            ? (e) => {
+                const el = e.currentTarget
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) onScrollEnd()
+              }
+            : undefined
+        }
         className={clsx(
           'flex min-h-[120px] flex-1 flex-col gap-2 rounded-xl p-1.5 transition-colors overflow-y-auto scrollbar-kanban',
           isOver
@@ -130,12 +140,39 @@ export default function KanbanPage() {
   const activeFilterCount = [onlyMine, onlyFree, overdue, paused, workOnly, hideClosed].filter(Boolean).length
 
   const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue, paused }
+  const COLUMN_PAGE_SIZE = 10
 
   const { data, isLoading } = useQuery({
     queryKey: ['kanban', params],
     queryFn: async () =>
-      (await api.get<{ columns: KanbanColumn[] }>('/orders/kanban', { params })).data,
+      (await api.get<{ columns: KanbanColumn[] }>('/orders/kanban', { params: { ...params, limit_per_column: COLUMN_PAGE_SIZE } })).data,
   })
+
+  // Ustunda "yana yuklash": har ustun uchun qo'shimcha yuklangan kartalar.
+  // Qidiruv/filtr o'zgarsa — tozalanadi, oddiy real-time yangilanishda saqlanib qoladi.
+  const [extra, setExtra] = useState<Record<number, OrderCard[]>>({})
+  const [loadingMore, setLoadingMore] = useState<Record<number, boolean>>({})
+  const paramsKey = JSON.stringify(params)
+  useEffect(() => {
+    setExtra({})
+  }, [paramsKey])
+
+  async function loadMore(col: KanbanColumn) {
+    const stageId = col.stage.id
+    if (loadingMore[stageId]) return
+    const loaded = col.orders.length + (extra[stageId]?.length ?? 0)
+    setLoadingMore((m) => ({ ...m, [stageId]: true }))
+    try {
+      const res = await api.get<{ items: OrderCard[]; total: number }>('/orders/kanban/column', {
+        params: { stage_id: stageId, offset: loaded, limit: COLUMN_PAGE_SIZE, ...params },
+      })
+      setExtra((e) => ({ ...e, [stageId]: [...(e[stageId] ?? []), ...res.data.items] }))
+    } catch (err) {
+      toast(errText(err, lang), 'error')
+    } finally {
+      setLoadingMore((m) => ({ ...m, [stageId]: false }))
+    }
+  }
 
   const { data: orderFields } = useQuery({
     queryKey: ['fields', 'order'],
@@ -192,7 +229,13 @@ export default function KanbanPage() {
   }, [qc])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
-  const allColumns = data?.columns ?? []
+  const allColumns = useMemo(() => {
+    const base = data?.columns ?? []
+    return base.map((c) => {
+      const ex = extra[c.stage.id]
+      return ex && ex.length ? { ...c, orders: [...c.orders, ...ex] } : c
+    })
+  }, [data, extra])
   const columns = workOnly ? allColumns.filter((c) => c.stage.kind === 'work') : allColumns
   const stages = useMemo(() => columns.map((c) => c.stage), [columns])
   const finalStages = useMemo(() => allColumns.filter((c) => c.stage.kind === 'success' || c.stage.kind === 'fail').map((c) => c.stage), [allColumns])
@@ -397,6 +440,9 @@ export default function KanbanPage() {
           onPause={setPauseTarget}
           onResume={setResumeTarget}
           onMove={setMoveTarget}
+          onLoadMore={loadMore}
+          loadingMore={loadingMore}
+          lang={lang}
         />
       ) : (
         <DndContext
@@ -414,40 +460,57 @@ export default function KanbanPage() {
           }}
         >
           <div className="flex flex-1 gap-3 overflow-x-auto overflow-y-hidden p-3 sm:p-4">
-            {visibleColumns.map((col) => (
-              <Column key={col.stage.id} col={col} isOver={overStage === col.stage.id}>
-                <SortableContext
-                  items={col.orders.map((o) => o.id)}
-                  strategy={verticalListSortingStrategy}
+            {visibleColumns.map((col) => {
+              const hasMore = col.total > col.orders.length
+              return (
+                <Column
+                  key={col.stage.id}
+                  col={col}
+                  isOver={overStage === col.stage.id}
+                  onScrollEnd={hasMore ? () => loadMore(col) : undefined}
                 >
-                  {col.orders.map((o) => (
-                    <SortableCard
-                      key={o.id}
-                      order={o}
-                      fields={visibility}
-                      cfDefs={cardCustomFields}
-                      onOpen={() => navigate(`/orders/${o.id}`)}
-                      onClaim={() => claim(o)}
-                      onMoveBack={async () => {
-                        const stage = (await api.get<Stage | null>(`/orders/${o.id}/prev-stage`)).data
-                        if (stage) setMoveBack({ order: o, stage })
-                      }}
-                      onPause={() => setPauseTarget(o)}
-                      onResume={() => setResumeTarget(o)}
-                    />
-                  ))}
-                </SortableContext>
+                  <SortableContext
+                    items={col.orders.map((o) => o.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {col.orders.map((o) => (
+                      <SortableCard
+                        key={o.id}
+                        order={o}
+                        fields={visibility}
+                        cfDefs={cardCustomFields}
+                        onOpen={() => navigate(`/orders/${o.id}`)}
+                        onClaim={() => claim(o)}
+                        onMoveBack={async () => {
+                          const stage = (await api.get<Stage | null>(`/orders/${o.id}/prev-stage`)).data
+                          if (stage) setMoveBack({ order: o, stage })
+                        }}
+                        onPause={() => setPauseTarget(o)}
+                        onResume={() => setResumeTarget(o)}
+                      />
+                    ))}
+                  </SortableContext>
 
-                {col.orders.length === 0 && (
-                  <div className="grid flex-1 place-items-center text-[11px] text-ink-faint">—</div>
-                )}
-                {col.total > col.orders.length && (
-                  <div className="py-1 text-center text-[10px] text-ink-faint">
-                    +{col.total - col.orders.length}
-                  </div>
-                )}
-              </Column>
-            ))}
+                  {col.orders.length === 0 && (
+                    <div className="grid flex-1 place-items-center text-[11px] text-ink-faint">—</div>
+                  )}
+                  {hasMore && (
+                    <div className="py-1 text-center text-[10px]">
+                      {loadingMore[col.stage.id] ? (
+                        <span className="text-ink-faint">…</span>
+                      ) : (
+                        <button
+                          className="text-ink-faint hover:text-brand-600 hover:underline"
+                          onClick={() => loadMore(col)}
+                        >
+                          +{col.total - col.orders.length} · {lang === 'ru' ? 'ещё' : 'yana'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </Column>
+              )
+            })}
           </div>
 
           {/* Drop zone: картани пастга судраб Успех/Провалга ташлаш */}
@@ -603,6 +666,9 @@ function MobileBoard({
   onPause,
   onResume,
   onMove,
+  onLoadMore,
+  loadingMore,
+  lang,
 }: {
   columns: KanbanColumn[]
   activeColumn?: KanbanColumn
@@ -615,8 +681,12 @@ function MobileBoard({
   onPause: (o: OrderCard) => void
   onResume: (o: OrderCard) => void
   onMove: (o: OrderCard) => void
+  onLoadMore: (col: KanbanColumn) => void
+  loadingMore: Record<number, boolean>
+  lang: string
 }) {
   const nm = useNm()
+  const hasMore = !!activeColumn && activeColumn.total > activeColumn.orders.length
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -650,7 +720,17 @@ function MobileBoard({
         })}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
+      <div
+        className="flex-1 overflow-y-auto p-3"
+        onScroll={
+          hasMore && activeColumn
+            ? (e) => {
+                const el = e.currentTarget
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) onLoadMore(activeColumn)
+              }
+            : undefined
+        }
+      >
         {!activeColumn || activeColumn.orders.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-ink-faint">—</div>
         ) : (
@@ -669,9 +749,18 @@ function MobileBoard({
                 onMove={() => onMove(o)}
               />
             ))}
-            {activeColumn.total > activeColumn.orders.length && (
-              <div className="py-1 text-center text-xs text-ink-faint">
-                +{activeColumn.total - activeColumn.orders.length}
+            {hasMore && (
+              <div className="py-1 text-center text-xs">
+                {loadingMore[activeColumn.stage.id] ? (
+                  <span className="text-ink-faint">…</span>
+                ) : (
+                  <button
+                    className="text-ink-faint hover:text-brand-600 hover:underline"
+                    onClick={() => onLoadMore(activeColumn)}
+                  >
+                    +{activeColumn.total - activeColumn.orders.length} · {lang === 'ru' ? 'ещё' : 'yana'}
+                  </button>
+                )}
               </div>
             )}
           </div>

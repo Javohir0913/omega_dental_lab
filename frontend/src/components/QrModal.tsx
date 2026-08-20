@@ -50,11 +50,8 @@ export default function QrModal({ order, onClose }: { order: OrderDetail; onClos
 <meta charset="utf-8">
 <style>
   @page { margin: 8mm; }
-  body { font-family: system-ui, sans-serif; display: flex; flex-direction: column;
-         align-items: center; justify-content: center; text-align: center; }
+  body { display: flex; align-items: center; justify-content: center; }
   img { width: 240px; height: 240px; }
-  .num { font-family: monospace; font-size: 16px; font-weight: 600; margin-top: 8px; }
-  .title { font-size: 12px; color: #555; margin-top: 2px; max-width: 260px; }
 </style>
 </head>
 <body></body>
@@ -63,13 +60,7 @@ export default function QrModal({ order, onClose }: { order: OrderDetail; onClos
     w.document.title = order.number
     const img = w.document.createElement('img')
     img.src = src
-    const num = w.document.createElement('div')
-    num.className = 'num'
-    num.textContent = order.number
-    const title = w.document.createElement('div')
-    title.className = 'title'
-    title.textContent = order.title ?? ''
-    w.document.body.append(img, num, title)
+    w.document.body.append(img)
     // document.write dan keyin DOM darhol to'ldirilgani uchun onload o'rniga kichik kechikish ishonchli
     setTimeout(() => {
       w.focus()

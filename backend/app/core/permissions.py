@@ -33,6 +33,8 @@ PERMISSIONS: list[Perm] = [
     P("order.edit.others", "Проекты", "Proyektlar", "Редактировать чужие проекты", "Boshqaning proyektini tahrirlash"),
     P("order.assign.any", "Проекты", "Proyektlar", "Назначать исполнителя другим", "Boshqaga mas'ul biriktirish"),
     P("order.claim", "Проекты", "Proyektlar", "Брать проект себе", "Proyektni o'ziga olish"),
+    P("order.qr.view", "Проекты", "Proyektlar", "Видеть QR-код проекта", "Proyekt QR-kodini ko'rish"),
+    P("order.qr.print", "Проекты", "Proyektlar", "Печатать QR-код проекта", "Proyekt QR-kodini chop etish"),
     # --- Chat ---
     P("chat.order", "Чат", "Chat", "Чат проекта", "Proyekt chati"),
     P("chat.direct", "Чат", "Chat", "Личные сообщения", "Shaxsiy xabarlar"),
@@ -76,7 +78,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     "admin": [
         "order.view.all", "order.create", "order.edit", "order.rename", "order.delete",
         "order.move.any", "order.move_back.others", "order.edit.others",
-        "order.assign.any", "order.claim",
+        "order.assign.any", "order.claim", "order.qr.view", "order.qr.print",
         "chat.order", "chat.direct", "chat.view.all", "file.upload", "file.delete",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage",
         "service.view", "service.manage",
@@ -87,7 +89,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     "hr": [
         "order.view.all", "order.create", "order.edit", "order.rename",
         "order.move.any", "order.move_back.others", "order.edit.others",
-        "order.assign.any",
+        "order.assign.any", "order.qr.view", "order.qr.print",
         "chat.order", "chat.direct", "file.upload",
         "patient.view", "patient.manage", "doctor.view", "doctor.manage", "service.view",
         "user.view", "user.manage", "user.password", "user.session",
@@ -95,7 +97,7 @@ ROLE_DEFAULTS: dict[str, list[str]] = {
     ],
     "technician": [
         "order.view.all", "order.move.own", "order.move_back.others", "order.edit.others",
-        "order.claim",
+        "order.claim", "order.qr.view",
         "chat.order", "chat.direct", "file.upload",
         "patient.view", "doctor.view", "service.view",
         "log.order",

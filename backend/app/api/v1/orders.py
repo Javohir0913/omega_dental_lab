@@ -1,7 +1,10 @@
+import io
 from datetime import datetime, timedelta
 from typing import Annotated
 
+import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import Text, and_, case, cast, func, or_, select
 
 from app.core.deps import CurrentUser, DbDep, require
@@ -634,6 +637,30 @@ async def order_history(order_id: int, db: DbDep, user: CurrentUser):
         row.stage_name_uz = h.stage.name_uz if h.stage else ""
         out.append(row)
     return out
+
+
+@router.get("/{order_id}/qr")
+async def order_qr(order_id: int, db: DbDep, user: CurrentUser):
+    """Proyekt sahifasiga skanerlab kirish uchun QR-kod (PNG).
+
+    Havola proyekt ID'siga bog'liq — deterministik, shuning uchun qayta
+    generatsiya qilish eskisini "buzmaydi": bir xil QR har doim bir xil
+    havolaga olib boradi, chop etilgan eski nusxa ham ishlashda davom etadi.
+    """
+    if not (user.is_super or user.has_perm("order.qr.view")):
+        raise HTTPException(403, "forbidden")
+    order = await _get_order(db, order_id, user)
+
+    base_url = (await get_setting(db, "frontend_url", "")).rstrip("/")
+    if not base_url:
+        raise HTTPException(400, "frontend_url_not_set")
+    link = f"{base_url}/orders/{order.id}"
+
+    img = qrcode.make(link, box_size=10, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 # --------------------------------------------------------------------------

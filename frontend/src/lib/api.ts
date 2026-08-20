@@ -151,4 +151,8 @@ const ERRORS: Record<string, { ru: string; uz: string }> = {
   file_type_not_allowed: { ru: 'Такой тип файла запрещён', uz: 'Bunday fayl turi taqiqlangan' },
   not_a_member: { ru: 'Вы не участник чата', uz: 'Siz chat a\'zosi emassiz' },
   empty_message: { ru: 'Сообщение не может быть пустым', uz: 'Xabar bo\'sh bo\'lishi mumkin emas' },
+  frontend_url_not_set: {
+    ru: 'Не задан адрес сайта в настройках (Общие настройки → Адрес сайта)',
+    uz: "Sozlamalarda sayt manzili ko'rsatilmagan (Umumiy sozlamalar → Sayt manzili)",
+  },
 }

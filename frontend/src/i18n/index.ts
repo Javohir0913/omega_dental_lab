@@ -38,6 +38,16 @@ export const dict: Dict = {
   paused_badge: { ru: 'На паузе', uz: 'Pauzada' },
   paused_by_label: { ru: 'Поставил на паузу', uz: 'Pauza qildi' },
   paused_since: { ru: 'С', uz: 'Vaqti' },
+  qr_code: { ru: 'QR-код', uz: 'QR-kod' },
+  qr_modal_hint: {
+    ru: 'Отсканируйте камерой телефона, чтобы открыть проект',
+    uz: 'Proyektni ochish uchun telefon kamerasi bilan skanerlang',
+  },
+  qr_print_note: {
+    ru: 'Код не меняется — распечатанный ранее ярлык продолжит работать',
+    uz: "Kod o'zgarmaydi — avval bosib chiqarilgan yorliq ham ishlashda davom etadi",
+  },
+  print: { ru: 'Печать', uz: "Chop etish" },
 
   // auth
   login: { ru: 'Вход', uz: 'Kirish' },

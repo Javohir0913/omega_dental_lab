@@ -11,6 +11,7 @@ import { toast } from '@/components/Toast'
 import ChatPanel from '@/components/ChatPanel'
 import MoveModal from '@/components/MoveModal'
 import PauseModal from '@/components/PauseModal'
+import QrModal from '@/components/QrModal'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import Model3DViewer from '@/components/Model3DViewer'
 import Model3DThumbnail from '@/components/Model3DThumbnail'
@@ -51,6 +52,7 @@ export default function OrderPage() {
   const [showMoveBack, setShowMoveBack] = useState(false)
   const [showPause, setShowPause] = useState(false)
   const [showResume, setShowResume] = useState(false)
+  const [showQr, setShowQr] = useState(false)
   const [move, setMove] = useState<{
     stage: Stage
     req?: RequirementError | null
@@ -183,6 +185,11 @@ export default function OrderPage() {
               {t('resume')}
             </button>
           )}
+          {can('order.qr.view') && (
+            <button className="btn-ghost" onClick={() => setShowQr(true)}>
+              {t('qr_code')}
+            </button>
+          )}
           {can('order.delete') && (
             <button className="btn-ghost text-rose-600" onClick={() => setDeleting(true)}>
               {t('delete')}
@@ -292,6 +299,8 @@ export default function OrderPage() {
         onCancel={() => setDeleting(false)}
         onOk={remove}
       />
+
+      {showQr && <QrModal order={order} onClose={() => setShowQr(false)} />}
 
       {showMoveBack && prevStage && (
         <Modal

@@ -11,6 +11,7 @@ import { toast } from '@/components/Toast'
 import ChatPanel from '@/components/ChatPanel'
 import MoveModal from '@/components/MoveModal'
 import PauseModal from '@/components/PauseModal'
+import ControlRejectModal from '@/components/ControlRejectModal'
 import QrModal from '@/components/QrModal'
 import { CustomFieldInput, FileFieldInput } from '@/components/FieldInput'
 import Model3DViewer from '@/components/Model3DViewer'
@@ -27,6 +28,7 @@ import type {
   Doctor,
   LayoutSection,
   LogEntry,
+  OrderControlEntry,
   OrderDetail,
   OrderUpdatePayload,
   Page,
@@ -53,10 +55,12 @@ export default function OrderPage() {
   const [showPause, setShowPause] = useState(false)
   const [showResume, setShowResume] = useState(false)
   const [showQr, setShowQr] = useState(false)
+  const [showControlReject, setShowControlReject] = useState(false)
   const [move, setMove] = useState<{
     stage: Stage
     req?: RequirementError | null
     needAssignee?: boolean
+    controlControllers?: { id: number; full_name: string }[]
   } | null>(null)
 
   const { data: order, isLoading } = useQuery({
@@ -85,10 +89,18 @@ export default function OrderPage() {
     const off2 = socket.on('order.moved', () =>
       qc.invalidateQueries({ queryKey: ['order', orderId] }),
     )
+    const off3 = socket.on('order.control_requested', () =>
+      qc.invalidateQueries({ queryKey: ['order', orderId] }),
+    )
+    const off4 = socket.on('order.control_rejected', () =>
+      qc.invalidateQueries({ queryKey: ['order', orderId] }),
+    )
     return () => {
       socket.leave(`order:${orderId}`)
       off()
       off2()
+      off3()
+      off4()
     }
   }, [orderId, qc])
 
@@ -114,7 +126,19 @@ export default function OrderPage() {
       const detail = (err as any)?.response?.data?.detail
       if (detail?.error === 'required_fields') setMove({ stage, req: detail as RequirementError })
       else if (detail?.error === 'next_assignee_required') setMove({ stage, needAssignee: true })
+      else if (detail?.error === 'control_required') setMove({ stage, controlControllers: detail.controllers ?? [] })
       else toast(errText(err, lang), 'error')
+    }
+  }
+
+  async function approveControl() {
+    try {
+      await api.post(`/orders/${orderId}/control/approve`, {})
+      refresh()
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      toast(`${t('control_approve')} ✓`)
+    } catch (e) {
+      toast(errText(e, lang), 'error')
     }
   }
 
@@ -168,6 +192,7 @@ export default function OrderPage() {
                 <Badge color={order.stage.color}>{nm(order.stage, 'name')}</Badge>
               )}
               {order.is_paused && <Badge color="#64748b">{t('paused_badge')}</Badge>}
+              {order.control_status === 'pending' && <Badge color="#22c55e">🛡 {t('control_pending')}</Badge>}
               {!order.is_paused && order.is_overdue && <Badge color="#e11d48">{t('overdue')}</Badge>}
             </div>
             <h1 className="mt-0.5 text-lg font-semibold leading-tight">{order.title}</h1>
@@ -184,6 +209,16 @@ export default function OrderPage() {
             <button className="btn-ghost" onClick={() => setShowResume(true)}>
               {t('resume')}
             </button>
+          )}
+          {order.can_approve_control && (
+            <>
+              <button className="btn-primary" onClick={approveControl}>
+                {t('control_approve')}
+              </button>
+              <button className="btn-ghost text-rose-600" onClick={() => setShowControlReject(true)}>
+                {t('control_reject')}
+              </button>
+            </>
           )}
           {can('order.qr.view') && (
             <button className="btn-ghost" onClick={() => setShowQr(true)}>
@@ -206,6 +241,15 @@ export default function OrderPage() {
             {order.paused_at && ` (${dt(order.paused_at)})`}
           </div>
           {order.pause_reason && <div className="mt-0.5">{t('pause_reason')}: {order.pause_reason}</div>}
+        </div>
+      )}
+
+      {order.control_status === 'pending' && (
+        <div className="mb-4 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/10 dark:text-emerald-300">
+          <div className="font-medium">
+            🛡 {t('control_pending')}
+            {order.control_controller && ` — ${order.control_controller.full_name}`}
+          </div>
         </div>
       )}
 
@@ -285,7 +329,19 @@ export default function OrderPage() {
           toStage={move.stage}
           requirement={move.req}
           needAssignee={move.needAssignee}
+          controlControllers={move.controlControllers}
           onClose={() => setMove(null)}
+          onDone={() => {
+            refresh()
+            qc.invalidateQueries({ queryKey: ['kanban'] })
+          }}
+        />
+      )}
+
+      {showControlReject && (
+        <ControlRejectModal
+          order={order}
+          onClose={() => setShowControlReject(false)}
           onDone={() => {
             refresh()
             qc.invalidateQueries({ queryKey: ['kanban'] })
@@ -1879,6 +1935,59 @@ function HistoryTab({ orderId }: { orderId: number }) {
           </div>
         ))}
       </div>
+      </div>
+
+      <ControlHistoryCard orderId={orderId} />
+    </div>
+  )
+}
+
+function ControlHistoryCard({ orderId }: { orderId: number }) {
+  const nm = useNm()
+  const t = useT()
+  const lang = useLang((s) => s.lang)
+  const { data = [] } = useQuery({
+    queryKey: ['order-controls', orderId],
+    queryFn: async () => (await api.get<OrderControlEntry[]>(`/orders/${orderId}/controls`)).data,
+  })
+
+  if (!data.length) return null
+
+  const statusColor = { pending: '#22c55e', approved: '#0ea5e9', rejected: '#e11d48' } as const
+  const statusLabel = { pending: t('control_pending'), approved: t('control_approve'), rejected: t('control_reject') } as const
+
+  return (
+    <div className="card p-4">
+      <div className="mb-3 text-sm font-semibold">{t('control_history')}</div>
+      <div className="space-y-3">
+        {data.map((c) => (
+          <div key={c.id} className="rounded-lg border border-surface-border p-2.5 text-xs dark:border-[#2a3140]">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge color={statusColor[c.status]}>{statusLabel[c.status]}</Badge>
+              <span className="font-medium">
+                {nm({ name_ru: c.from_stage_name_ru, name_uz: c.from_stage_name_uz }, 'name')}
+                {' → '}
+                {nm({ name_ru: c.target_stage_name_ru, name_uz: c.target_stage_name_uz }, 'name')}
+              </span>
+            </div>
+            <div className="mt-1 text-ink-soft">
+              {lang === 'ru' ? 'Отправил' : 'Yubordi'}: {c.requested_by?.full_name ?? '—'}
+              {' · '}
+              {lang === 'ru' ? 'Контролёр' : 'Kontrolyor'}: {c.controller?.full_name ?? '—'}
+              {' · '}
+              {dt(c.requested_at)}
+            </div>
+            {c.comment && (
+              <div className="mt-1 rounded-md bg-surface-muted px-2 py-1 dark:bg-[#242b38]">{c.comment}</div>
+            )}
+            {c.status !== 'pending' && (
+              <div className="mt-1 text-ink-faint">
+                {c.resolved_at && dt(c.resolved_at)}
+                {c.resolved_comment && ` — ${c.resolved_comment}`}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )

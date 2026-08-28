@@ -122,6 +122,7 @@ export default function AdminStages() {
                 {s.duration_hours ? <span>⏱ {s.duration_hours} ч</span> : null}
                 {s.allow_claim && <span>✋ {t('allow_claim')}</span>}
                 {s.require_next_assignee && <span>👤 {t('require_next_assignee')}</span>}
+                {s.control_enabled && <span>🛡 {t('control')}</span>}
               </div>
             </div>
 
@@ -189,6 +190,8 @@ function StageForm({
     duration_hours: stage?.duration_hours ?? ('' as number | ''),
     allow_claim: stage?.allow_claim ?? true,
     require_next_assignee: stage?.require_next_assignee ?? false,
+    control_enabled: stage?.control_enabled ?? false,
+    control_pause_deadline: stage?.control_pause_deadline ?? false,
     is_active: stage?.is_active ?? true,
   })
   const [nextStageIds, setNextStageIds] = useState<number[]>(stage?.next_stage_ids ?? [])
@@ -213,6 +216,8 @@ function StageForm({
       duration_hours: form.duration_hours === '' ? null : Number(form.duration_hours),
       allow_claim: form.allow_claim,
       require_next_assignee: form.require_next_assignee,
+      control_enabled: form.control_enabled,
+      control_pause_deadline: form.control_pause_deadline,
       next_stage_ids: nextStageIds,
       incoming_stage_ids: incomingStageIds,
     }
@@ -347,6 +352,26 @@ function StageForm({
               </span>
             </span>
           </label>
+
+          <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.control_enabled}
+              onChange={(e) => setForm({ ...form, control_enabled: e.target.checked })}
+            />
+            {t('control_enabled')}
+          </label>
+
+          {form.control_enabled && (
+            <label className="mb-2 ml-6 flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.control_pause_deadline}
+                onChange={(e) => setForm({ ...form, control_pause_deadline: e.target.checked })}
+              />
+              {t('control_pause_deadline')}
+            </label>
+          )}
         </>
       )}
 

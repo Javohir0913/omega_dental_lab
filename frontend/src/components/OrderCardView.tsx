@@ -5,6 +5,7 @@ import { Avatar } from '@/components/ui'
 import PhotoThumb from '@/components/PhotoThumb'
 import { useLang, useT } from '@/i18n'
 import { deadlineInfo } from '@/lib/format'
+import { useControlColor } from '@/lib/useControlColor'
 import type { CustomField, OrderCard } from '@/lib/types'
 
 export function CardBody({
@@ -17,6 +18,8 @@ export function CardBody({
   onPause,
   onResume,
   onMove,
+  onApproveControl,
+  onRejectControl,
 }: {
   order: OrderCard
   onOpen?: () => void
@@ -28,9 +31,13 @@ export function CardBody({
   onResume?: () => void
   /** Sudrab emas, bosib bosqich tanlash (mobil kanban) uchun. */
   onMove?: () => void
+  onApproveControl?: () => void
+  onRejectControl?: () => void
 }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
+  const controlColor = useControlColor()
+  const inControl = order.control_status === 'pending'
   // Ish kalendari yoqilgan bo'lsa — qolgan ISH vaqti (dam kuni/tunda kamaymaydi)
   const dl = deadlineInfo(order.stage_deadline ?? order.deadline, order.stage_remaining_seconds)
   const projectDl = deadlineInfo(order.deadline)
@@ -69,11 +76,18 @@ export function CardBody({
       onClick={onOpen}
       className={clsx(
         'card cursor-pointer p-2.5 transition-shadow hover:shadow-pop',
-        order.is_paused
-          ? 'card-paused border-l-2 border-l-amber-400'
-          : order.is_overdue && 'border-l-2 border-l-rose-400',
+        !inControl &&
+          (order.is_paused
+            ? 'card-paused border-l-2 border-l-amber-400'
+            : order.is_overdue && 'border-l-2 border-l-rose-400'),
       )}
-      style={order.color && !order.is_paused ? { borderLeft: `3px solid ${order.color}` } : undefined}
+      style={
+        inControl
+          ? { borderLeft: `3px solid ${controlColor}`, boxShadow: `inset 0 0 0 1px ${controlColor}33` }
+          : order.color && !order.is_paused
+            ? { borderLeft: `3px solid ${order.color}` }
+            : undefined
+      }
     >
       {show('photo') && order.photo && (
         <PhotoThumb
@@ -150,6 +164,48 @@ export function CardBody({
       {order.is_paused && order.pause_reason && (
         <div className="mt-1 truncate rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
           {t('pause_reason')}: {order.pause_reason}
+        </div>
+      )}
+
+      {inControl && (
+        <div
+          className="mt-1 flex items-center justify-between gap-2 truncate rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+          style={{ background: `${controlColor}1a`, color: controlColor }}
+        >
+          <span className="truncate">
+            🛡 {t('control_pending')}
+            {order.control_controller ? `: ${order.control_controller.full_name}` : ''}
+          </span>
+          {order.can_approve_control && (onApproveControl || onRejectControl) && (
+            <span className="flex shrink-0 items-center gap-1">
+              {onApproveControl && (
+                <button
+                  type="button"
+                  title={t('control_approve')}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onApproveControl()
+                  }}
+                  className="rounded px-1 py-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+                >
+                  ✓
+                </button>
+              )}
+              {onRejectControl && (
+                <button
+                  type="button"
+                  title={t('control_reject')}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRejectControl()
+                  }}
+                  className="rounded px-1 py-0.5 text-rose-600 hover:bg-black/5 dark:hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          )}
         </div>
       )}
 
@@ -288,6 +344,8 @@ export default function SortableCard({
   onPause,
   onResume,
   onMove,
+  onApproveControl,
+  onRejectControl,
 }: {
   order: OrderCard
   onOpen: () => void
@@ -298,6 +356,8 @@ export default function SortableCard({
   onPause?: () => void
   onResume?: () => void
   onMove?: () => void
+  onApproveControl?: () => void
+  onRejectControl?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: order.id,
@@ -323,6 +383,8 @@ export default function SortableCard({
         onPause={onPause}
         onResume={onResume}
         onMove={onMove}
+        onApproveControl={onApproveControl}
+        onRejectControl={onRejectControl}
       />
     </div>
   )

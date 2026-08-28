@@ -16,11 +16,13 @@ from app.models import (
     Message,
     NotifyEvent,
     Order,
+    OrderControl,
     OrderStageHistory,
     Stage,
     StageKind,
     User,
     role_move_stages,
+    stage_controllers,
     stage_incoming,
     stage_transitions,
 )
@@ -86,6 +88,13 @@ def can_user_work_stage(user: User, stage: Stage) -> bool:
     if user.is_super or user.has_perm("order.move.any"):
         return True
     return any(s.id == stage.id for s in (user.stages or []))
+
+
+def can_user_control_stage(user: User, stage: Stage) -> bool:
+    """Foydalanuvchi shu bosqich uchun kontrolyor sifatida belgilanganmi."""
+    if user.is_super:
+        return True
+    return any(s.id == stage.id for s in (user.control_stages or []))
 
 
 def can_move(user: User, order: Order) -> bool:
@@ -166,6 +175,20 @@ async def incoming_allowed(db: AsyncSession, user: User, from_stage_id: int, to_
     if not allowed_ids:
         return True
     return from_stage_id in allowed_ids
+
+
+async def move_allowed(db: AsyncSession, user: User, order: Order, to_stage: Stage) -> bool:
+    """`move_order` va `control/request` endpointlari uchun umumiy ruxsat zanjiri:
+    can_move(_back) → stage_access_allowed → transition_allowed → incoming_allowed."""
+    is_backward = to_stage.sort < order.stage.sort
+    allowed = can_move_back(user, order) if is_backward else can_move(user, order)
+    if allowed:
+        allowed = await stage_access_allowed(db, user, to_stage)
+    if allowed:
+        allowed = await transition_allowed(db, user, order.stage_id, to_stage.id)
+    if allowed:
+        allowed = await incoming_allowed(db, user, order.stage_id, to_stage.id)
+    return allowed
 
 
 def can_edit(user: User, order: Order) -> bool:
@@ -715,6 +738,221 @@ async def resume(db: AsyncSession, order: Order, user: User, request=None) -> Or
         db, NotifyEvent.ORDER_RESUMED, order=order, actor=user, stage_id=order.stage_id
     )
     await broadcast_order(order, "order.resumed", {})
+    return order
+
+
+# --------------------------------------------------------------------------
+# Control (bosqichdan chiqishdan oldin majburiy tekshiruv)
+# --------------------------------------------------------------------------
+
+
+async def request_control(
+    db: AsyncSession,
+    *,
+    order: Order,
+    target_stage: Stage,
+    controller_id: int,
+    actor: User,
+    comment: str | None = None,
+    next_responsible_id: int | None = None,
+    request=None,  # noqa: ANN001
+) -> OrderControl:
+    """Joriy bosqichdan chiqishni kontrolyorga tekshirishga yuboradi.
+
+    Ko'chirish ruxsati (can_move/stage_access_allowed/...) va majburiy maydonlar
+    tekshiruvi bu funksiyadan OLDIN (endpointda) qilinadi — move_order bilan bir xil
+    naqsh. Bu yerda faqat control-ga xos qoidalar tekshiriladi.
+    """
+    if order.control_id is not None:
+        raise HTTPException(409, "control_pending")
+    if not order.stage.control_enabled:
+        raise HTTPException(400, "control_not_enabled")
+
+    res = await db.execute(
+        select(stage_controllers.c.user_id).where(
+            stage_controllers.c.stage_id == order.stage_id,
+            stage_controllers.c.user_id == controller_id,
+        )
+    )
+    is_assigned_controller = res.scalar_one_or_none() is not None
+    if not is_assigned_controller:
+        res = await db.execute(select(User).where(User.id == controller_id, User.is_active.is_(True)))
+        controller_user = res.scalar_one_or_none()
+        if controller_user is None or not controller_user.is_super:
+            raise HTTPException(422, "invalid_controller")
+
+    from_stage = order.stage
+    now = now_utc()
+
+    control = OrderControl(
+        order_id=order.id,
+        from_stage_id=from_stage.id,
+        target_stage_id=target_stage.id,
+        controller_id=controller_id,
+        requested_by_id=actor.id,
+        next_responsible_id=next_responsible_id,
+        requested_at=now,
+        comment=comment,
+        status="pending",
+    )
+    db.add(control)
+    await db.flush()
+
+    order.control_id = control.id
+
+    if from_stage.control_pause_deadline and order.stage_deadline is not None:
+        order.stage_deadline_frozen_remaining_sec = await remaining_stage_seconds(
+            db, now, order.stage_deadline
+        )
+        order.stage_deadline = None
+
+    await db.flush()
+    await db.refresh(order, ["control"])
+    await db.refresh(control, ["controller", "requested_by", "target_stage"])
+
+    await log_activity(
+        db,
+        action="order.control_requested",
+        category=LogCategory.ORDER,
+        actor=actor,
+        order_id=order.id,
+        entity="order",
+        entity_id=order.id,
+        message_ru=f"Отправлен на контроль {control.controller.full_name if control.controller else '—'} "
+        f"(этап {from_stage.name_ru} → {target_stage.name_ru})",
+        message_uz=f"Control uchun {control.controller.full_name if control.controller else '—'} ga yuborildi "
+        f"({from_stage.name_uz} → {target_stage.name_uz})",
+        meta={"stage_id": from_stage.id, "target_stage_id": target_stage.id, "controller_id": controller_id},
+        request=request,
+    )
+    await system_message(
+        db, order,
+        f"Control: {actor.full_name} отправил на проверку "
+        f"{control.controller.full_name if control.controller else '—'}"
+        + (f"\n{comment}" if comment else ""),
+        actor_id=actor.id,
+    )
+    await notify_svc.notify(
+        db,
+        NotifyEvent.ORDER_CONTROL_REQUESTED,
+        order=order,
+        actor=actor,
+        stage_id=from_stage.id,
+        extra_user_ids=[controller_id],
+        ctx={"comment": comment or "—"},
+    )
+    await broadcast_order(order, "order.control_requested", {})
+    return control
+
+
+async def approve_control(
+    db: AsyncSession, *, order: Order, user: User, comment: str | None = None, request=None  # noqa: ANN001
+) -> Order:
+    """Kontrolyor tasdiqlaydi — proyekt operator mo'ljallagan bosqichga avtomatik o'tadi."""
+    control = order.control
+    if control is None or control.status != "pending":
+        raise HTTPException(409, "not_pending_control")
+    if not (user.is_super or user.id == control.controller_id):
+        raise HTTPException(403, "forbidden")
+
+    target_stage = control.target_stage
+    requested_by_id = control.requested_by_id
+    next_responsible_id = control.next_responsible_id
+
+    control.status = "approved"
+    control.resolved_at = now_utc()
+    control.resolved_comment = comment
+    order.control_id = None
+    if order.stage_deadline_frozen_remaining_sec is not None and order.stage_deadline is None:
+        # target bosqichga o'tishda apply_stage_deadline barribir qayta hisoblaydi
+        order.stage_deadline_frozen_remaining_sec = None
+    await db.flush()
+
+    await log_activity(
+        db,
+        action="order.control_approved",
+        category=LogCategory.ORDER,
+        actor=user,
+        order_id=order.id,
+        entity="order",
+        entity_id=order.id,
+        message_ru=f"Контроль пройден: {user.full_name}" + (f". {comment}" if comment else ""),
+        message_uz=f"Control o'tdi: {user.full_name}" + (f". {comment}" if comment else ""),
+        meta={"control_id": control.id, "target_stage_id": target_stage.id},
+        request=request,
+    )
+    await notify_svc.notify(
+        db,
+        NotifyEvent.ORDER_CONTROL_APPROVED,
+        order=order,
+        actor=user,
+        stage_id=order.stage_id,
+        extra_user_ids=[requested_by_id] if requested_by_id else [],
+        ctx={"comment": comment or "—"},
+    )
+
+    await move_to_stage(
+        db,
+        order=order,
+        to_stage=target_stage,
+        actor=user,
+        next_responsible_id=next_responsible_id,
+        comment=comment,
+        request=request,
+    )
+    return order
+
+
+async def reject_control(
+    db: AsyncSession, *, order: Order, user: User, comment: str, request=None  # noqa: ANN001
+) -> Order:
+    """Kontrolyor rad etadi — proyekt joyida qoladi, dedlayn (agar muzlagan bo'lsa) tiklanadi."""
+    control = order.control
+    if control is None or control.status != "pending":
+        raise HTTPException(409, "not_pending_control")
+    if not (user.is_super or user.id == control.controller_id):
+        raise HTTPException(403, "forbidden")
+
+    now = now_utc()
+    control.status = "rejected"
+    control.resolved_at = now
+    control.resolved_comment = comment
+    order.control_id = None
+
+    if order.stage_deadline is None and order.stage_deadline_frozen_remaining_sec is not None:
+        order.stage_deadline = await deadline_after(
+            db, now, max(0, order.stage_deadline_frozen_remaining_sec)
+        )
+        order.stage_deadline_frozen_remaining_sec = None
+
+    await db.flush()
+
+    await log_activity(
+        db,
+        action="order.control_rejected",
+        category=LogCategory.ORDER,
+        actor=user,
+        order_id=order.id,
+        entity="order",
+        entity_id=order.id,
+        message_ru=f"Контроль отклонён: {user.full_name}. Причина: {comment}",
+        message_uz=f"Control rad etildi: {user.full_name}. Sababi: {comment}",
+        meta={"control_id": control.id},
+        request=request,
+    )
+    await system_message(
+        db, order, f"Control rad etildi: {user.full_name} — {comment}", actor_id=user.id
+    )
+    await notify_svc.notify(
+        db,
+        NotifyEvent.ORDER_CONTROL_REJECTED,
+        order=order,
+        actor=user,
+        stage_id=order.stage_id,
+        extra_user_ids=[control.requested_by_id] if control.requested_by_id else [],
+        ctx={"reason": comment},
+    )
+    await broadcast_order(order, "order.control_rejected", {})
     return order
 
 

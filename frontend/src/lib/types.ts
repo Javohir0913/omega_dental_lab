@@ -33,8 +33,11 @@ export interface Stage {
   duration_hours: number | null
   allow_claim: boolean
   require_next_assignee: boolean
+  control_enabled: boolean
+  control_pause_deadline: boolean
   next_stage_ids: number[]
   incoming_stage_ids: number[]
+  controller_ids: number[]
 }
 
 export interface ServiceItem {
@@ -69,6 +72,7 @@ export interface User {
   role: Role
   stages: Stage[]
   services: ServiceItem[]
+  control_stages: Stage[]
 }
 
 export interface Me extends User {
@@ -184,6 +188,11 @@ export interface OrderCard {
   /** Hozir vaqt to'xtab turibdi (dam kuni / bayram / ish soatidan tashqari) */
   deadline_paused: boolean
   deadline_pause_reason: 'holiday' | 'weekend' | 'off_hours' | null
+  /** Control (majburiy tekshiruv) */
+  control_status: 'pending' | null
+  control_controller: UserShort | null
+  control_target_stage_id: number | null
+  can_approve_control: boolean
 }
 
 export interface WorkCalendarStatus {
@@ -241,8 +250,27 @@ export interface KanbanColumn {
 export interface KanbanCursor {
   id: number
   closed_at: string | null
+  control_rank: number | null
   priority: number | null
   sort: number | null
+}
+
+export interface OrderControlEntry {
+  id: number
+  order_id: number
+  from_stage_id: number
+  from_stage_name_ru: string
+  from_stage_name_uz: string
+  target_stage_id: number
+  target_stage_name_ru: string
+  target_stage_name_uz: string
+  controller: UserShort | null
+  requested_by: UserShort | null
+  requested_at: string
+  comment: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  resolved_at: string | null
+  resolved_comment: string | null
 }
 
 export interface CustomField {

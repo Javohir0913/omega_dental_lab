@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import hash_password
 from app.models import LogCategory, Role, Stage, User, UserSession
+from app.models.catalog import stage_controllers
 from app.models.user import user_services, user_stages
 from app.schemas.common import Msg, Page
 from app.schemas.user import (
@@ -83,7 +84,7 @@ def _guard_super(actor: User, target: User) -> None:
         raise HTTPException(403, "cannot_touch_super_admin")
 
 
-async def _apply_links(db, user: User, stage_ids, service_ids) -> None:  # noqa: ANN001
+async def _apply_links(db, user: User, stage_ids, service_ids, control_stage_ids=None) -> None:  # noqa: ANN001
     """N:M bog'lanishlarni async-safe usulda yangilaydi.
 
     `user.stages = [...]` async kontekstda lazy load chaqirib MissingGreenlet beradi —
@@ -103,6 +104,13 @@ async def _apply_links(db, user: User, stage_ids, service_ids) -> None:  # noqa:
                 insert(user_services),
                 [{"user_id": user.id, "service_id": sid} for sid in service_ids],
             )
+    if control_stage_ids is not None:
+        await db.execute(delete(stage_controllers).where(stage_controllers.c.user_id == user.id))
+        if control_stage_ids:
+            await db.execute(
+                insert(stage_controllers),
+                [{"user_id": user.id, "stage_id": sid} for sid in control_stage_ids],
+            )
 
 
 async def _load_user(db, user_id: int) -> User:
@@ -113,6 +121,7 @@ async def _load_user(db, user_id: int) -> User:
             selectinload(User.role),
             selectinload(User.stages),
             selectinload(User.services),
+            selectinload(User.control_stages),
         )
     )
     user = res.scalar_one_or_none()
@@ -196,7 +205,7 @@ async def create_user(
     )
     db.add(user)
     await db.flush()
-    await _apply_links(db, user, body.stage_ids, body.service_ids)
+    await _apply_links(db, user, body.stage_ids, body.service_ids, body.control_stage_ids)
 
     await log_activity(
         db,
@@ -228,6 +237,7 @@ async def update_user(
     data = body.model_dump(exclude_unset=True)
     stage_ids = data.pop("stage_ids", None)
     service_ids = data.pop("service_ids", None)
+    control_stage_ids = data.pop("control_stage_ids", None)
 
     if "username" in data and data["username"] != user.username:
         # Super adminning login'ini hech kim (o'zi ham shu endpoint orqali emas, /auth/me
@@ -254,7 +264,7 @@ async def update_user(
     changes = {k: {"from": getattr(user, k), "to": v} for k, v in data.items()}
     for k, v in data.items():
         setattr(user, k, v)
-    await _apply_links(db, user, stage_ids, service_ids)
+    await _apply_links(db, user, stage_ids, service_ids, control_stage_ids)
 
     # Sessiya limiti kamaytirilsa yoki user o'chirilsa — ortiqcha sessiyalarni uzamiz
     if data.get("is_active") is False:

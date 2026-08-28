@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
+from app.models.catalog import stage_controllers
 
 # --- N:M bog'lanishlar ---
 
@@ -114,6 +115,8 @@ class User(Base, TimestampMixin):
 
     stages: Mapped[list["Stage"]] = relationship(secondary=user_stages, lazy="selectin")  # noqa: F821
     services: Mapped[list["Service"]] = relationship(secondary=user_services, lazy="selectin")  # noqa: F821
+    # control yoqilgan qaysi bosqichlarni kontrolyor sifatida tekshira oladi
+    control_stages: Mapped[list["Stage"]] = relationship(secondary=stage_controllers, lazy="selectin")  # noqa: F821
 
     @property
     def is_super(self) -> bool:

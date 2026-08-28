@@ -30,6 +30,15 @@ stage_incoming = Table(
     Column("from_stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Bosqichda control (majburiy tekshiruv) yoqilganda, shu bosqichni kimlar
+# kontrolyor sifatida tekshira olishini belgilaydi (user_stages naqshi bo'yicha).
+stage_controllers = Table(
+    "stage_controllers",
+    Base.metadata,
+    Column("stage_id", ForeignKey("stages.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class StageKind:
     """Kanban ustuni turi.
@@ -71,6 +80,11 @@ class Stage(Base, TimestampMixin):
     allow_claim: Mapped[bool] = mapped_column(Boolean, default=True)
     # oldingi bosqich bajaruvchisi keyingi bosqich mas'ulini tanlashi shartmi
     require_next_assignee: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # bosqichdan chiqishdan oldin kontrolyor tasdig'i majburiymi
+    control_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # control jarayonida bosqich dedlayni muzlaydimi
+    control_pause_deadline: Mapped[bool] = mapped_column(Boolean, default=False)
 
     @property
     def is_system(self) -> bool:

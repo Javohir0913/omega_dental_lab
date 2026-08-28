@@ -74,6 +74,11 @@ class OrderCard(ORMModel):
     deadline_paused: bool = False
     # Nega to'xtagan: holiday | weekend | off_hours
     deadline_pause_reason: str | None = None
+    # Control (majburiy tekshiruv): pending | None
+    control_status: str | None = None
+    control_controller: UserShort | None = None
+    control_target_stage_id: int | None = None
+    can_approve_control: bool = False
 
 
 class OrderDetail(OrderCard):
@@ -149,6 +154,42 @@ class OrderPause(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class ControlRequest(BaseModel):
+    target_stage_id: int
+    controller_id: int
+    comment: str | None = None
+    # target_stage'ga o'tishda talab qilinishi mumkin bo'lgan maydonlar — move_order bilan bir xil
+    next_responsible_id: int | None = None
+    fields: dict = {}
+    custom_fields: dict = {}
+
+
+class ControlDecision(BaseModel):
+    comment: str | None = None
+
+
+class ControlReject(BaseModel):
+    comment: str = Field(min_length=1, max_length=2000)
+
+
+class OrderControlOut(ORMModel):
+    id: int
+    order_id: int
+    from_stage_id: int
+    from_stage_name_ru: str = ""
+    from_stage_name_uz: str = ""
+    target_stage_id: int
+    target_stage_name_ru: str = ""
+    target_stage_name_uz: str = ""
+    controller: UserShort | None = None
+    requested_by: UserShort | None = None
+    requested_at: datetime
+    comment: str | None = None
+    status: str
+    resolved_at: datetime | None = None
+    resolved_comment: str | None = None
+
+
 class WorkCalendarStatus(BaseModel):
     """Ish kalendarining joriy holati — interfeysda «vaqt to'xtagan» belgisi uchun."""
 
@@ -175,6 +216,7 @@ class KanbanOut(BaseModel):
 class KanbanCursor(BaseModel):
     id: int
     closed_at: datetime | None = None
+    control_rank: int | None = None
     priority: int | None = None
     sort: int | None = None
 

@@ -82,6 +82,7 @@ class UserOut(ORMModel):
     role: RoleShort
     stages: list[StageShort] = []
     services: list[ServiceShort] = []
+    control_stages: list[StageShort] = []
 
 
 class UserShort(ORMModel):
@@ -108,6 +109,7 @@ class UserCreate(BaseModel):
     is_active: bool = True
     stage_ids: list[int] = []
     service_ids: list[int] = []
+    control_stage_ids: list[int] = []
 
     @field_validator("lang")
     @classmethod
@@ -127,6 +129,7 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     stage_ids: list[int] | None = None
     service_ids: list[int] | None = None
+    control_stage_ids: list[int] | None = None
 
 
 class PasswordSet(BaseModel):

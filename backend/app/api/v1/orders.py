@@ -24,6 +24,7 @@ from app.models import (
     Message,
     NotifyEvent,
     Order,
+    OrderControl,
     OrderFileRead,
     OrderStageHistory,
     Patient,
@@ -31,10 +32,15 @@ from app.models import (
     Stage,
     StageKind,
     User,
+    stage_controllers,
 )
 from app.schemas.catalog import StageOut
 from app.schemas.common import Msg, Page
+from app.schemas.user import UserShort
 from app.schemas.order import (
+    ControlDecision,
+    ControlReject,
+    ControlRequest,
     FileOut,
     KanbanColumn,
     KanbanColumnPage,
@@ -42,6 +48,7 @@ from app.schemas.order import (
     KanbanOut,
     OrderAssign,
     OrderCard,
+    OrderControlOut,
     OrderCreate,
     OrderDetail,
     OrderMove,
@@ -159,10 +166,21 @@ async def _decorate(  # noqa: ANN001
             or (order.deadline and order.deadline < now)
         )
     )
-    card.can_move = svc.can_move(user, order)
+    card.can_move = bool(svc.can_move(user, order) and order.control_id is None)
     card.can_move_back = bool(
-        not order.is_closed and not order.is_paused and svc.can_move_back(user, order)
+        not order.is_closed
+        and not order.is_paused
+        and order.control_id is None
+        and svc.can_move_back(user, order)
     )
+    if order.control is not None:
+        card.control_status = "pending"
+        card.control_target_stage_id = order.control.target_stage_id
+        if order.control.controller is not None:
+            card.control_controller = UserShort.model_validate(order.control.controller)
+        card.can_approve_control = bool(
+            user.is_super or user.id == order.control.controller_id
+        )
     card.can_claim = bool(
         order.responsible_id is None
         and not order.is_closed
@@ -313,6 +331,12 @@ async def tooth_chart_scale(db: DbDep, _: CurrentUser):
     return await get_setting(db, "tooth_chart_scale", DEFAULT_SETTINGS["tooth_chart_scale"][0]["v"])
 
 
+@router.get("/control-color", response_model=str)
+async def control_color(db: DbDep, _: CurrentUser):
+    """Control holatidagi proyekt rangi. Har qanday login qilgan foydalanuvchi ko'ra oladi."""
+    return await get_setting(db, "control_color", DEFAULT_SETTINGS["control_color"][0]["v"])
+
+
 @router.get("/work-calendar", response_model=WorkCalendarStatus)
 async def work_calendar_status(db: DbDep, _: CurrentUser):
     """Hozir bosqich vaqti ketyaptimi yoki to'xtaganmi (dam kuni/bayram/ish soatidan tashqari)."""
@@ -365,6 +389,7 @@ def _kanban_base_query(
     only_free: bool,
     overdue: bool,
     paused: bool,
+    control: bool = False,
 ):
     base = select(Order).where(Order.deleted_at.is_(None))
     base = _visibility_filter(base, user)
@@ -393,15 +418,21 @@ def _kanban_base_query(
         )
     if paused:
         base = base.where(Order.is_paused.is_(True))
+    if control:
+        base = base.where(Order.control_id.is_not(None))
     return base
+
+
+# control'dagi kartalar ustuvor: har doim ustunning eng tepasida turadi
+_CONTROL_RANK = case((Order.control_id.is_not(None), 0), else_=1)
 
 
 def _kanban_order_by(q_stage, stage: Stage):  # noqa: ANN001
     # yopiq ustunlarda (Успех/Провал) — eng yangilari, ish ustunlarida —
-    # prioritet bo'yicha (kam = tepada), keyin qo'lda surilgan tartib
+    # avval control'dagilar, keyin prioritet bo'yicha (kam = tepada), so'ng qo'lda surilgan tartib
     if stage.is_final:
         return q_stage.order_by(Order.closed_at.desc().nullslast(), Order.id.desc())
-    return q_stage.order_by(Order.priority.asc(), Order.sort.asc(), Order.id.desc())
+    return q_stage.order_by(_CONTROL_RANK, Order.priority.asc(), Order.sort.asc(), Order.id.desc())
 
 
 @router.get("/kanban", response_model=KanbanOut)
@@ -417,6 +448,7 @@ async def kanban(
     only_free: bool = False,
     overdue: bool = False,
     paused: bool = False,
+    control: bool = False,
     limit_per_column: int = Query(10, ge=5, le=200),
 ):
     """Kanban doskasi: ustunlar = bosqichlar, kartalar = proyektlar.
@@ -427,7 +459,8 @@ async def kanban(
     """
     stages = await svc.active_stages(db)
     base = _kanban_base_query(
-        user, q, responsible_id, doctor_id, patient_id, service_id, only_mine, only_free, overdue, paused
+        user, q, responsible_id, doctor_id, patient_id, service_id,
+        only_mine, only_free, overdue, paused, control,
     )
 
     columns: list[KanbanColumn] = []
@@ -468,9 +501,11 @@ async def kanban_column(
     only_free: bool = False,
     overdue: bool = False,
     paused: bool = False,
+    control: bool = False,
     limit: int = Query(10, ge=1, le=100),
     after_id: int | None = None,
     after_closed_at: datetime | None = None,
+    after_control_rank: int | None = None,
     after_priority: int | None = None,
     after_sort: int | None = None,
 ):
@@ -487,7 +522,8 @@ async def kanban_column(
         raise HTTPException(404, "stage_not_found")
 
     base = _kanban_base_query(
-        user, q, responsible_id, doctor_id, patient_id, service_id, only_mine, only_free, overdue, paused
+        user, q, responsible_id, doctor_id, patient_id, service_id,
+        only_mine, only_free, overdue, paused, control,
     )
     q_stage = base.where(Order.stage_id == stage_id)
     total = (await db.execute(select(func.count()).select_from(q_stage.subquery()))).scalar() or 0
@@ -506,19 +542,30 @@ async def kanban_column(
                 q_stage = q_stage.where(Order.closed_at.is_(None), Order.id < after_id)
         q_stage = q_stage.order_by(Order.closed_at.desc().nullslast(), Order.id.desc())
     else:
-        if after_id is not None and after_priority is not None and after_sort is not None:
+        if (
+            after_id is not None
+            and after_control_rank is not None
+            and after_priority is not None
+            and after_sort is not None
+        ):
             q_stage = q_stage.where(
                 or_(
-                    Order.priority > after_priority,
-                    and_(Order.priority == after_priority, Order.sort > after_sort),
+                    _CONTROL_RANK > after_control_rank,
+                    and_(_CONTROL_RANK == after_control_rank, Order.priority > after_priority),
                     and_(
+                        _CONTROL_RANK == after_control_rank,
+                        Order.priority == after_priority,
+                        Order.sort > after_sort,
+                    ),
+                    and_(
+                        _CONTROL_RANK == after_control_rank,
                         Order.priority == after_priority,
                         Order.sort == after_sort,
                         Order.id < after_id,
                     ),
                 )
             )
-        q_stage = q_stage.order_by(Order.priority.asc(), Order.sort.asc(), Order.id.desc())
+        q_stage = q_stage.order_by(_CONTROL_RANK, Order.priority.asc(), Order.sort.asc(), Order.id.desc())
 
     res = await db.execute(q_stage.limit(limit))
     rows = list(res.scalars().all())
@@ -526,9 +573,11 @@ async def kanban_column(
     next_cursor = None
     if len(rows) == limit:
         last = rows[-1]
+        last_control_rank = None if stage.is_final else (0 if last.control_id is not None else 1)
         next_cursor = KanbanCursor(
             id=last.id,
             closed_at=last.closed_at if stage.is_final else None,
+            control_rank=last_control_rank,
             priority=last.priority if not stage.is_final else None,
             sort=last.sort if not stage.is_final else None,
         )
@@ -921,19 +970,15 @@ async def move_order(
     """Kartani boshqa bosqichga surish (drag&drop yoki tugma)."""
     order = await _get_order(db, order_id, user)
 
+    if order.control_id is not None:
+        raise HTTPException(409, "control_pending")
+
     to_stage = await svc.get_stage(db, body.stage_id)
     if not to_stage.is_active:
         raise HTTPException(400, "stage_inactive")
 
     from_stage_id = order.stage_id
-    is_backward = to_stage.sort < order.stage.sort
-    allowed = svc.can_move_back(user, order) if is_backward else svc.can_move(user, order)
-    if allowed:
-        allowed = await svc.stage_access_allowed(db, user, to_stage)
-    if allowed:
-        allowed = await svc.transition_allowed(db, user, from_stage_id, to_stage.id)
-    if allowed:
-        allowed = await svc.incoming_allowed(db, user, from_stage_id, to_stage.id)
+    allowed = await svc.move_allowed(db, user, order, to_stage)
 
     if not allowed:
         await log_activity(
@@ -944,6 +989,24 @@ async def move_order(
             request=request, commit=True,
         )
         raise HTTPException(403, "forbidden")
+
+    if order.stage.control_enabled:
+        res = await db.execute(
+            select(User.id, User.full_name).join(
+                stage_controllers, stage_controllers.c.user_id == User.id
+            ).where(stage_controllers.c.stage_id == order.stage_id, User.is_active.is_(True))
+        )
+        controllers = [{"id": r[0], "full_name": r[1]} for r in res.all()]
+        raise HTTPException(
+            422,
+            detail={
+                "error": "control_required",
+                "stage_id": order.stage_id,
+                "message_ru": f"Этап «{order.stage.name_ru}» требует контроля перед переходом",
+                "message_uz": f"«{order.stage.name_uz}» bosqichi o'tishdan oldin control talab qiladi",
+                "controllers": controllers,
+            },
+        )
 
     # Shu surishning o'zida kelgan qiymatlarni avval yozamiz —
     # majburiy maydon modali shu tarzda to'ldiradi.
@@ -1059,6 +1122,151 @@ async def resume_order(order_id: int, request: Request, db: DbDep, user: Current
     detail = OrderDetail.model_validate(order)
     detail.custom_fields = await get_values(db, "order", order.id)
     return await _decorate(db, detail, order, user)
+
+
+@router.post("/{order_id}/control/request", response_model=OrderDetail)
+async def request_control(
+    order_id: int, body: ControlRequest, request: Request, db: DbDep, user: CurrentUser
+):
+    """Bosqichdan chiqishni kontrolyorga tekshirishga yuborish."""
+    order = await _get_order(db, order_id, user)
+
+    if order.control_id is not None:
+        raise HTTPException(409, "control_pending")
+    if not order.stage.control_enabled:
+        raise HTTPException(400, "control_not_enabled")
+
+    to_stage = await svc.get_stage(db, body.target_stage_id)
+    if not to_stage.is_active:
+        raise HTTPException(400, "stage_inactive")
+
+    if not await svc.move_allowed(db, user, order, to_stage):
+        raise HTTPException(403, "forbidden")
+
+    payload: dict = dict(body.fields or {})
+    if body.custom_fields:
+        payload["custom_fields"] = body.custom_fields
+    if body.next_responsible_id:
+        payload["responsible_id"] = body.next_responsible_id
+
+    try:
+        await req_svc.validate_move(db, order, order.stage_id, to_stage.id, payload)
+    except req_svc.RequirementError as e:
+        raise HTTPException(422, detail=e.to_detail()) from e
+
+    if (
+        to_stage.require_next_assignee
+        and not body.next_responsible_id
+        and to_stage.kind == StageKind.WORK
+    ):
+        raise HTTPException(
+            422,
+            detail={
+                "error": "next_assignee_required",
+                "stage_id": to_stage.id,
+                "message_ru": f"Выберите, кто будет делать этап «{to_stage.name_ru}»",
+                "message_uz": f"«{to_stage.name_uz}» bosqichini kim qilishini tanlang",
+            },
+        )
+
+    sys_fields = {
+        k: v for k, v in (body.fields or {}).items()
+        if k in {"title", "patient_id", "doctor_id", "deadline", "description", "priority"}
+    }
+    for k, v in sys_fields.items():
+        if k == "deadline" and isinstance(v, str):
+            try:
+                v = datetime.fromisoformat(v)
+            except ValueError:
+                raise HTTPException(422, "bad_deadline") from None
+        setattr(order, k, v)
+    if body.custom_fields:
+        await set_values(db, "order", order.id, body.custom_fields)
+
+    if body.next_responsible_id:
+        res = await db.execute(
+            select(User).where(User.id == body.next_responsible_id, User.is_active.is_(True))
+        )
+        target_user = res.scalar_one_or_none()
+        if target_user is None:
+            raise HTTPException(404, "user_not_found")
+        if not svc.can_user_work_stage(target_user, to_stage):
+            raise HTTPException(
+                422,
+                detail={
+                    "error": "user_cannot_work_stage",
+                    "message_ru": f"{target_user.full_name} не назначен на этап «{to_stage.name_ru}»",
+                    "message_uz": f"{target_user.full_name} «{to_stage.name_uz}» bosqichiga biriktirilmagan",
+                },
+            )
+
+    await svc.request_control(
+        db,
+        order=order,
+        target_stage=to_stage,
+        controller_id=body.controller_id,
+        actor=user,
+        comment=body.comment,
+        next_responsible_id=body.next_responsible_id,
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(order)
+
+    detail = OrderDetail.model_validate(order)
+    detail.custom_fields = await get_values(db, "order", order.id)
+    return await _decorate(db, detail, order, user)
+
+
+@router.post("/{order_id}/control/approve", response_model=OrderDetail)
+async def approve_control_order(
+    order_id: int, body: ControlDecision, request: Request, db: DbDep, user: CurrentUser
+):
+    """Kontrolyor tasdiqlaydi — proyekt avtomatik keyingi bosqichga o'tadi."""
+    order = await _get_order(db, order_id, user)
+    await svc.approve_control(db, order=order, user=user, comment=body.comment, request=request)
+    await db.commit()
+    await db.refresh(order)
+
+    detail = OrderDetail.model_validate(order)
+    detail.custom_fields = await get_values(db, "order", order.id)
+    return await _decorate(db, detail, order, user)
+
+
+@router.post("/{order_id}/control/reject", response_model=OrderDetail)
+async def reject_control_order(
+    order_id: int, body: ControlReject, request: Request, db: DbDep, user: CurrentUser
+):
+    """Kontrolyor rad etadi — proyekt joyida qoladi."""
+    order = await _get_order(db, order_id, user)
+    await svc.reject_control(db, order=order, user=user, comment=body.comment, request=request)
+    await db.commit()
+    await db.refresh(order)
+
+    detail = OrderDetail.model_validate(order)
+    detail.custom_fields = await get_values(db, "order", order.id)
+    return await _decorate(db, detail, order, user)
+
+
+@router.get("/{order_id}/controls", response_model=list[OrderControlOut])
+async def order_controls(order_id: int, db: DbDep, user: CurrentUser):
+    """Proyektning butun control tarixi (so'rov/tasdiq/rad)."""
+    order = await _get_order(db, order_id, user)
+    res = await db.execute(
+        select(OrderControl)
+        .where(OrderControl.order_id == order.id)
+        .order_by(OrderControl.requested_at.desc())
+    )
+    rows = list(res.scalars().all())
+    out = []
+    for r in rows:
+        item = OrderControlOut.model_validate(r)
+        item.from_stage_name_ru = r.from_stage.name_ru if r.from_stage else ""
+        item.from_stage_name_uz = r.from_stage.name_uz if r.from_stage else ""
+        item.target_stage_name_ru = r.target_stage.name_ru if r.target_stage else ""
+        item.target_stage_name_uz = r.target_stage.name_uz if r.target_stage else ""
+        out.append(item)
+    return out
 
 
 @router.post("/{order_id}/claim", response_model=OrderDetail)

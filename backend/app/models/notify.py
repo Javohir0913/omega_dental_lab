@@ -22,13 +22,18 @@ class NotifyEvent:
     ORDER_PAUSED = "order.paused"
     ORDER_RESUMED = "order.resumed"
     ORDER_MOVED_BACK = "order.moved_back"  # bosqich(lar) orqaga qaytarildi
+    ORDER_CONTROL_REQUESTED = "order.control_requested"  # kontrolyorga tekshirish uchun yuborildi
+    ORDER_CONTROL_APPROVED = "order.control_approved"  # kontrolyor tasdiqladi
+    ORDER_CONTROL_REJECTED = "order.control_rejected"  # kontrolyor rad etdi
     CHAT_MESSAGE = "chat.message"
 
     ALL = [
         ORDER_CREATED, ORDER_STAGE_CHANGED, ORDER_ASSIGNED, ORDER_CLAIMED,
         ORDER_UNASSIGNED, ORDER_RENAMED, ORDER_SUCCESS, ORDER_FAIL,
         ORDER_OVERDUE, ORDER_DEADLINE_OVERDUE, ORDER_FILE,
-        ORDER_PAUSED, ORDER_RESUMED, ORDER_MOVED_BACK, CHAT_MESSAGE,
+        ORDER_PAUSED, ORDER_RESUMED, ORDER_MOVED_BACK,
+        ORDER_CONTROL_REQUESTED, ORDER_CONTROL_APPROVED, ORDER_CONTROL_REJECTED,
+        CHAT_MESSAGE,
     ]
 
 

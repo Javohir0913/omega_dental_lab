@@ -4,7 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from app.core.deps import CurrentUser, DbDep, require
-from app.models import LogCategory, Order, Stage, StageKind, User, stage_incoming, stage_transitions
+from app.models import (
+    LogCategory,
+    Order,
+    Stage,
+    StageKind,
+    User,
+    stage_controllers,
+    stage_incoming,
+    stage_transitions,
+)
 from app.realtime.hub import hub
 from app.schemas.catalog import StageCreate, StageOut, StageReorder, StageUpdate
 from app.schemas.common import Msg
@@ -23,6 +32,10 @@ async def _stage_out(db, stage: Stage) -> StageOut:  # noqa: ANN001
         select(stage_incoming.c.from_stage_id).where(stage_incoming.c.to_stage_id == stage.id)
     )
     out.incoming_stage_ids = [row[0] for row in res.all()]
+    res = await db.execute(
+        select(stage_controllers.c.user_id).where(stage_controllers.c.stage_id == stage.id)
+    )
+    out.controller_ids = [row[0] for row in res.all()]
     return out
 
 
@@ -66,11 +79,17 @@ async def list_stages(db: DbDep, user: CurrentUser, include_inactive: bool = Fal
     for to_id, from_id in res.all():
         incoming_map.setdefault(to_id, []).append(from_id)
 
+    res = await db.execute(select(stage_controllers.c.stage_id, stage_controllers.c.user_id))
+    controller_map: dict[int, list[int]] = {}
+    for stage_id, user_id in res.all():
+        controller_map.setdefault(stage_id, []).append(user_id)
+
     out = []
     for s in stages:
         item = StageOut.model_validate(s)
         item.next_stage_ids = next_map.get(s.id, [])
         item.incoming_stage_ids = incoming_map.get(s.id, [])
+        item.controller_ids = controller_map.get(s.id, [])
         out.append(item)
     return out
 

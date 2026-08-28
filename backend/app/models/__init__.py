@@ -5,6 +5,7 @@ from app.models.catalog import (
     Service,
     Stage,
     StageKind,
+    stage_controllers,
     stage_incoming,
     stage_transitions,
 )
@@ -23,7 +24,7 @@ from app.models.holiday import Holiday
 from app.models.layout import OrderFieldLayout, OrderFieldSection
 from app.models.log import ActivityLog, LogCategory, LogLevel
 from app.models.notify import Notification, NotifyEvent, NotifyTemplate, Recipient
-from app.models.order import Order, OrderStageHistory, order_services
+from app.models.order import Order, OrderControl, OrderStageHistory, order_services
 from app.models.setting import DEFAULT_SETTINGS, Setting
 from app.models.telegram import TelegramContact
 from app.models.user import (
@@ -39,7 +40,7 @@ from app.models.user import (
 
 __all__ = [
     "Base",
-    "Doctor", "Patient", "Service", "Stage", "StageKind", "stage_incoming", "stage_transitions",
+    "Doctor", "Patient", "Service", "Stage", "StageKind", "stage_controllers", "stage_incoming", "stage_transitions",
     "Chat", "ChatMember", "ChatType", "Message",
     "CustomField", "CustomFieldValue", "FieldEntity", "FieldType",
     "RequirementMoment", "StageRequirement", "SYSTEM_ORDER_FIELDS",
@@ -48,7 +49,7 @@ __all__ = [
     "OrderFieldLayout", "OrderFieldSection",
     "ActivityLog", "LogCategory", "LogLevel",
     "Notification", "NotifyEvent", "NotifyTemplate", "Recipient",
-    "Order", "OrderStageHistory", "order_services",
+    "Order", "OrderControl", "OrderStageHistory", "order_services",
     "Setting", "DEFAULT_SETTINGS",
     "TelegramContact",
     "Permission", "Role", "User", "UserSession",

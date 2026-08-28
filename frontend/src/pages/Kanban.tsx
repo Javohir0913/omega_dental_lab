@@ -24,6 +24,7 @@ import { Modal, Spinner } from '@/components/ui'
 import SortableCard, { CardBody } from '@/components/OrderCardView'
 import MoveModal from '@/components/MoveModal'
 import PauseModal from '@/components/PauseModal'
+import ControlRejectModal from '@/components/ControlRejectModal'
 import OrderForm from '@/components/OrderForm'
 import WorkCalendarNotice from '@/components/WorkCalendarNotice'
 import type { KanbanColumn, KanbanCursor, OrderCard, RequirementError, Stage, CustomField } from '@/lib/types'
@@ -114,6 +115,7 @@ export default function KanbanPage() {
   const [paused, setPausedState] = useState(() => localStorage.getItem('omega_kanban_paused') === 'true')
   const [workOnly, setWorkOnlyState] = useState(() => localStorage.getItem('omega_kanban_work_only') === 'true')
   const [hideClosed, setHideClosedState] = useState(() => localStorage.getItem('omega_kanban_hide_closed') === 'true')
+  const [controlOnly, setControlOnlyState] = useState(() => localStorage.getItem('omega_kanban_control') === 'true')
 
   const setOnlyMine = (v: boolean) => { setOnlyMineState(v); localStorage.setItem('omega_kanban_only_mine', String(v)) }
   const setOnlyFree = (v: boolean) => { setOnlyFreeState(v); localStorage.setItem('omega_kanban_only_free', String(v)) }
@@ -121,6 +123,7 @@ export default function KanbanPage() {
   const setPaused = (v: boolean) => { setPausedState(v); localStorage.setItem('omega_kanban_paused', String(v)) }
   const setWorkOnly = (v: boolean) => { setWorkOnlyState(v); localStorage.setItem('omega_kanban_work_only', String(v)) }
   const setHideClosed = (v: boolean) => { setHideClosedState(v); localStorage.setItem('omega_kanban_hide_closed', String(v)) }
+  const setControlOnly = (v: boolean) => { setControlOnlyState(v); localStorage.setItem('omega_kanban_control', String(v)) }
   const [dragging, setDragging] = useState<OrderCard | null>(null)
   const [overStage, setOverStage] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
@@ -129,6 +132,7 @@ export default function KanbanPage() {
     stage: Stage
     req?: RequirementError | null
     needAssignee?: boolean
+    controlControllers?: { id: number; full_name: string }[]
   } | null>(null)
   const [showFields, setShowFields] = useState(false)
   const fieldsRef = useRef<HTMLDivElement>(null)
@@ -137,9 +141,10 @@ export default function KanbanPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [activeStageId, setActiveStageId] = useState<number | null>(null)
   const [moveTarget, setMoveTarget] = useState<OrderCard | null>(null)
-  const activeFilterCount = [onlyMine, onlyFree, overdue, paused, workOnly, hideClosed].filter(Boolean).length
+  const [controlReject, setControlReject] = useState<OrderCard | null>(null)
+  const activeFilterCount = [onlyMine, onlyFree, overdue, paused, workOnly, hideClosed, controlOnly].filter(Boolean).length
 
-  const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue, paused }
+  const params = { q: q || undefined, only_mine: onlyMine, only_free: onlyFree, overdue, paused, control: controlOnly }
   const COLUMN_PAGE_SIZE = 10
 
   const { data, isLoading } = useQuery({
@@ -167,7 +172,13 @@ export default function KanbanPage() {
     // farqli o'laroq, shu orada ustunga yangi karta qo'shilib ketsa ham
     // (masalan Success/Fail), allaqachon yuklangan kartalar buzilmaydi.
     const last = col.orders[col.orders.length - 1]
-    const cursor = cursors[stageId] ?? (last && { id: last.id, closed_at: last.closed_at, priority: last.priority, sort: last.sort })
+    const cursor = cursors[stageId] ?? (last && {
+      id: last.id,
+      closed_at: last.closed_at,
+      control_rank: last.control_status === 'pending' ? 0 : 1,
+      priority: last.priority,
+      sort: last.sort,
+    })
     if (!cursor) return
     setLoadingMore((m) => ({ ...m, [stageId]: true }))
     try {
@@ -179,6 +190,7 @@ export default function KanbanPage() {
             limit: COLUMN_PAGE_SIZE,
             after_id: cursor.id,
             after_closed_at: cursor.closed_at ?? undefined,
+            after_control_rank: cursor.control_rank ?? undefined,
             after_priority: cursor.priority ?? undefined,
             after_sort: cursor.sort ?? undefined,
             ...params,
@@ -249,6 +261,8 @@ export default function KanbanPage() {
       socket.on('order.updated', refresh),
       socket.on('order.deleted', refresh),
       socket.on('stages.changed', refresh),
+      socket.on('order.control_requested', refresh),
+      socket.on('order.control_rejected', refresh),
     ]
     return () => offs.forEach((off) => off())
   }, [qc])
@@ -316,9 +330,21 @@ export default function KanbanPage() {
         setMove({ order, stage, req: detail as RequirementError })
       } else if (detail?.error === 'next_assignee_required') {
         setMove({ order, stage, needAssignee: true })
+      } else if (detail?.error === 'control_required') {
+        setMove({ order, stage, controlControllers: detail.controllers ?? [] })
       } else {
         toast(errText(err, lang), 'error')
       }
+    }
+  }
+
+  async function approveControl(order: OrderCard) {
+    try {
+      await api.post(`/orders/${order.id}/control/approve`, {})
+      qc.invalidateQueries({ queryKey: ['kanban'] })
+      toast(`${order.number} — ${t('control_approve')} ✓`)
+    } catch (err) {
+      toast(errText(err, lang), 'error')
     }
   }
 
@@ -381,6 +407,7 @@ export default function KanbanPage() {
               { on: paused, set: setPaused, label: t('paused_badge') },
               { on: workOnly, set: setWorkOnly, label: lang === 'ru' ? 'В работе' : 'Ishda' },
               { on: hideClosed, set: setHideClosed, label: lang === 'ru' ? 'Скрыть закрытые' : 'Yopiqni yashirish' },
+              { on: controlOnly, set: setControlOnly, label: t('control_filter') },
             ].map((f) => (
               <button
                 key={f.label}
@@ -465,6 +492,8 @@ export default function KanbanPage() {
           onPause={setPauseTarget}
           onResume={setResumeTarget}
           onMove={setMoveTarget}
+          onApproveControl={approveControl}
+          onRejectControl={setControlReject}
           onLoadMore={loadMore}
           loadingMore={loadingMore}
           lang={lang}
@@ -512,6 +541,8 @@ export default function KanbanPage() {
                         }}
                         onPause={() => setPauseTarget(o)}
                         onResume={() => setResumeTarget(o)}
+                        onApproveControl={() => approveControl(o)}
+                        onRejectControl={() => setControlReject(o)}
                       />
                     ))}
                   </SortableContext>
@@ -626,6 +657,7 @@ export default function KanbanPage() {
           toStage={move.stage}
           requirement={move.req}
           needAssignee={move.needAssignee}
+          controlControllers={move.controlControllers}
           onClose={() => setMove(null)}
           onDone={() => {
             qc.invalidateQueries({ queryKey: ['kanban'] })
@@ -664,6 +696,14 @@ export default function KanbanPage() {
         </Modal>
       )}
 
+      {controlReject && (
+        <ControlRejectModal
+          order={controlReject}
+          onClose={() => setControlReject(null)}
+          onDone={() => qc.invalidateQueries({ queryKey: ['kanban'] })}
+        />
+      )}
+
       {creating && (
         <OrderForm
           onClose={() => setCreating(false)}
@@ -691,6 +731,8 @@ function MobileBoard({
   onPause,
   onResume,
   onMove,
+  onApproveControl,
+  onRejectControl,
   onLoadMore,
   loadingMore,
   lang,
@@ -706,6 +748,8 @@ function MobileBoard({
   onPause: (o: OrderCard) => void
   onResume: (o: OrderCard) => void
   onMove: (o: OrderCard) => void
+  onApproveControl: (o: OrderCard) => void
+  onRejectControl: (o: OrderCard) => void
   onLoadMore: (col: KanbanColumn) => void
   loadingMore: Record<number, boolean>
   lang: string
@@ -772,6 +816,8 @@ function MobileBoard({
                 onPause={() => onPause(o)}
                 onResume={() => onResume(o)}
                 onMove={() => onMove(o)}
+                onApproveControl={() => onApproveControl(o)}
+                onRejectControl={() => onRejectControl(o)}
               />
             ))}
             {hasMore && (

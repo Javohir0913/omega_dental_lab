@@ -34,7 +34,12 @@ type SettingsValues = {
   telegram_digest_weekly_time?: string
   tooth_labels?: Record<string, string>
   tooth_chart_scale?: number
+  control_color?: string
 }
+
+const CONTROL_COLOR_PRESETS = [
+  '#22c55e', '#0ea5e9', '#f59e0b', '#ef4444', '#8b5cf6', '#6366f1',
+]
 
 const WEEKDAYS: { value: number; key: string }[] = [
   { value: 0, key: 'weekday_mon' },
@@ -251,6 +256,29 @@ export default function AdminSettings() {
           <div className="text-xs text-ink-faint">{t('setting_claim_enabled_hint')}</div>
         </div>
       </label>
+
+      <Field label={t('control_color')}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CONTROL_COLOR_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => set('control_color', c)}
+              className={clsx(
+                'h-7 w-7 rounded-md border-2 transition-transform',
+                (form.control_color ?? '#22c55e') === c ? 'scale-110 border-ink' : 'border-transparent',
+              )}
+              style={{ background: c }}
+            />
+          ))}
+          <input
+            type="color"
+            value={form.control_color ?? '#22c55e'}
+            onChange={(e) => set('control_color', e.target.value)}
+            className="h-7 w-9 cursor-pointer rounded border border-surface-border"
+          />
+        </div>
+      </Field>
 
       <Field label={t('setting_log_retention')}>
         <div className="flex flex-wrap items-center gap-3">

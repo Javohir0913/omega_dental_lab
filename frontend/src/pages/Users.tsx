@@ -214,6 +214,9 @@ function UserForm({
   })
   const [stageIds, setStageIds] = useState<number[]>(user?.stages.map((s) => s.id) ?? [])
   const [serviceIds, setServiceIds] = useState<number[]>(user?.services.map((s) => s.id) ?? [])
+  const [controlStageIds, setControlStageIds] = useState<number[]>(
+    user?.control_stages.map((s) => s.id) ?? [],
+  )
   const [busy, setBusy] = useState(false)
 
   const { data: stages = [] } = useQuery({
@@ -238,6 +241,7 @@ function UserForm({
       is_active: form.is_active,
       stage_ids: stageIds,
       service_ids: serviceIds,
+      control_stage_ids: controlStageIds,
     }
     try {
       if (edit) {
@@ -257,6 +261,7 @@ function UserForm({
   }
 
   const workStages = stages.filter((s) => s.kind === 'work')
+  const controlStages = stages.filter((s) => s.control_enabled)
 
   return (
     <Modal
@@ -405,6 +410,33 @@ function UserForm({
           })}
         </div>
       </Field>
+
+      {controlStages.length > 0 && (
+        <Field label={t('control_stages')}>
+          <div className="flex flex-wrap gap-1.5">
+            {controlStages.map((s) => {
+              const on = controlStageIds.includes(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() =>
+                    setControlStageIds((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
+                  }
+                  className="chip border transition-all"
+                  style={{
+                    backgroundColor: on ? `${s.color}22` : 'transparent',
+                    borderColor: on ? s.color : '#e4e7ec',
+                    color: on ? s.color : '#8d96a3',
+                  }}
+                >
+                  {nm(s, 'name')}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
+      )}
 
       <Field label={t('can_do_services')}>
         <div className="flex flex-wrap gap-1.5">

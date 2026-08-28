@@ -93,6 +93,21 @@ DEFAULT_TEXTS: dict[str, tuple[str, str, str, str]] = {
         "{actor} вернул «{order_title}» с этапа {stage_prev} на этап {stage} — ваша работа на этом этапе может потребовать проверки",
         "{actor} «{order_title}» ni {stage_prev} dan {stage} bosqichiga qaytardi — bu bosqichdagi ishingiz qayta tekshirilishi mumkin",
     ),
+    NotifyEvent.ORDER_CONTROL_REQUESTED: (
+        "{order_number}: нужен контроль", "{order_number}: control kerak",
+        "{actor} отправил «{order_title}» вам на контроль на этапе {stage}",
+        "{actor} «{order_title}» ni {stage} bosqichida sizga control uchun yubordi",
+    ),
+    NotifyEvent.ORDER_CONTROL_APPROVED: (
+        "{order_number}: контроль пройден", "{order_number}: control o'tdi",
+        "{actor} подтвердил контроль «{order_title}» на этапе {stage}, проект перемещён дальше",
+        "{actor} «{order_title}» ning {stage} bosqichidagi control'ini tasdiqladi, proyekt keyingi bosqichga o'tdi",
+    ),
+    NotifyEvent.ORDER_CONTROL_REJECTED: (
+        "{order_number}: контроль отклонён", "{order_number}: control rad etildi",
+        "{actor} отклонил «{order_title}» на этапе {stage}. Причина: {reason}",
+        "{actor} «{order_title}» ni {stage} bosqichida rad etdi. Sababi: {reason}",
+    ),
     NotifyEvent.CHAT_MESSAGE: (
         "Сообщение от {actor}", "{actor} dan xabar",
         "{message}", "{message}",
@@ -114,6 +129,10 @@ DEFAULT_RECIPIENTS: dict[str, list[str]] = {
     NotifyEvent.ORDER_PAUSED: ["role:admin", "role:super_admin"],
     NotifyEvent.ORDER_RESUMED: ["role:admin", "role:super_admin"],
     NotifyEvent.ORDER_MOVED_BACK: [Recipient.SKIPPED_STAGE_WORKERS],
+    # qabul qiluvchi (kontrolyor yoki so'rov yuborgan) har doim `extra_user_ids` orqali aniq beriladi
+    NotifyEvent.ORDER_CONTROL_REQUESTED: [],
+    NotifyEvent.ORDER_CONTROL_APPROVED: [],
+    NotifyEvent.ORDER_CONTROL_REJECTED: [],
     NotifyEvent.CHAT_MESSAGE: [],  # chat a'zolari alohida hisoblanadi
 }
 

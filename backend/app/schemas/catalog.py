@@ -19,8 +19,11 @@ class StageOut(ORMModel):
     duration_hours: int | None = None
     allow_claim: bool
     require_next_assignee: bool
+    control_enabled: bool = False
+    control_pause_deadline: bool = False
     next_stage_ids: list[int] = []
     incoming_stage_ids: list[int] = []
+    controller_ids: list[int] = []
 
 
 class StageCreate(BaseModel):
@@ -32,6 +35,8 @@ class StageCreate(BaseModel):
     duration_hours: int | None = None
     allow_claim: bool = True
     require_next_assignee: bool = False
+    control_enabled: bool = False
+    control_pause_deadline: bool = False
     next_stage_ids: list[int] = []
     incoming_stage_ids: list[int] = []
 
@@ -45,6 +50,8 @@ class StageUpdate(BaseModel):
     duration_hours: int | None = None
     allow_claim: bool | None = None
     require_next_assignee: bool | None = None
+    control_enabled: bool | None = None
+    control_pause_deadline: bool | None = None
     next_stage_ids: list[int] | None = None
     incoming_stage_ids: list[int] | None = None
 

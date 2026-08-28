@@ -92,6 +92,14 @@ class Order(Base, TimestampMixin):
     # yumshoq o'chirish — 30 kun korzinkada turadi
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
+    # hozir ochiq (pending) control so'rovi — tasdiq/rad bo'lganda NULL qilinadi
+    control_id: Mapped[int | None] = mapped_column(
+        ForeignKey("order_controls.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    control: Mapped["OrderControl | None"] = relationship(
+        lazy="selectin", foreign_keys=[control_id], post_update=True
+    )
+
     # kanban ustuni ichidagi qo'lda tartib (drag&drop)
     sort: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -141,3 +149,42 @@ class OrderStageHistory(Base):
     # stage_deadline - left_at (sekundlarda) shu bosqichdan chiqqan payt uchun;
     # manfiy bo'lsa — kechikish; orqaga qaytarilganda dedlaynni tiklash uchun ishlatiladi
     remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class OrderControl(Base):
+    """Bosqichdan chiqishda majburiy control (tekshiruv) so'rovi va uning natijasi."""
+
+    __tablename__ = "order_controls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+
+    from_stage_id: Mapped[int] = mapped_column(ForeignKey("stages.id"))
+    target_stage_id: Mapped[int] = mapped_column(ForeignKey("stages.id"))
+    from_stage: Mapped[Stage] = relationship(lazy="selectin", foreign_keys=[from_stage_id])
+    target_stage: Mapped[Stage] = relationship(lazy="selectin", foreign_keys=[target_stage_id])
+
+    controller_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    controller: Mapped["User | None"] = relationship(  # noqa: F821
+        lazy="selectin", foreign_keys=[controller_id]
+    )
+    requested_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    requested_by: Mapped["User | None"] = relationship(  # noqa: F821
+        lazy="selectin", foreign_keys=[requested_by_id]
+    )
+    # tasdiqlansa target_stage'ga o'tishda mas'ul sifatida beriladi (majburiy bo'lsa)
+    next_responsible_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)  # operator izohi
+
+    # pending | approved | rejected
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_comment: Mapped[str | None] = mapped_column(Text, nullable=True)  # kontrolyor izohi

@@ -28,6 +28,7 @@ export default function MoveModal({
   toStage,
   requirement,
   needAssignee,
+  controlControllers,
   onClose,
   onDone,
 }: {
@@ -35,16 +36,20 @@ export default function MoveModal({
   toStage: Stage
   requirement?: RequirementError | null
   needAssignee?: boolean
+  /** Berilsa — bu oddiy ko'chirish emas, control'ga yuborish oynasi (stage control_enabled bo'lgani uchun). */
+  controlControllers?: { id: number; full_name: string }[]
   onClose: () => void
   onDone: (updated: OrderDetail) => void
 }) {
   const t = useT()
   const nm = useNm()
   const lang = useLang((s) => s.lang)
+  const isControl = Boolean(controlControllers)
 
   const [fields, setFields] = useState<Record<string, unknown>>({})
   const [customFields, setCustomFields] = useState<Record<string, unknown>>({})
   const [assignee, setAssignee] = useState<number | null>(null)
+  const [controllerId, setControllerId] = useState<number | null>(controlControllers?.[0]?.id ?? null)
   const [comment, setComment] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -75,16 +80,29 @@ export default function MoveModal({
   const missing = req?.fields ?? []
 
   async function submit() {
+    if (isControl && !controllerId) {
+      setError(t('required'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const { data } = await api.post<OrderDetail>(`/orders/${order.id}/move`, {
-        stage_id: toStage.id,
-        next_responsible_id: assignee,
-        comment: comment.trim() || null,
-        fields,
-        custom_fields: customFields,
-      })
+      const { data } = isControl
+        ? await api.post<OrderDetail>(`/orders/${order.id}/control/request`, {
+            target_stage_id: toStage.id,
+            controller_id: controllerId,
+            next_responsible_id: assignee,
+            comment: comment.trim() || null,
+            fields,
+            custom_fields: customFields,
+          })
+        : await api.post<OrderDetail>(`/orders/${order.id}/move`, {
+            stage_id: toStage.id,
+            next_responsible_id: assignee,
+            comment: comment.trim() || null,
+            fields,
+            custom_fields: customFields,
+          })
       onDone(data)
       onClose()
     } catch (e) {
@@ -171,7 +189,7 @@ export default function MoveModal({
       onClose={onClose}
       title={
         <span className="flex items-center gap-2">
-          {t('move_to')}
+          {isControl ? t('control_send') : t('move_to')}
           <span
             className="chip"
             style={{
@@ -189,8 +207,8 @@ export default function MoveModal({
           <button className="btn-ghost" onClick={onClose} disabled={busy}>
             {t('cancel')}
           </button>
-          <button className="btn-primary" onClick={submit} disabled={busy}>
-            {busy ? t('loading') : t('save')}
+          <button className="btn-primary" onClick={submit} disabled={busy || (isControl && !controllerId)}>
+            {busy ? t('loading') : isControl ? t('control_send') : t('save')}
           </button>
         </>
       }
@@ -198,6 +216,27 @@ export default function MoveModal({
       <div className="mb-3 text-xs text-ink-faint">
         {order.number} · {order.title}
       </div>
+
+      {isControl && (
+        <Field label={t('control_choose_controller')} required>
+          <div className="flex flex-wrap gap-1.5">
+            {(controlControllers ?? []).map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setControllerId(c.id)}
+                className={
+                  controllerId === c.id
+                    ? 'chip border border-brand-300 bg-brand-100 text-brand-700 dark:border-brand-700 dark:bg-brand-900/30 dark:text-brand-200'
+                    : 'chip border border-surface-border text-ink-soft dark:border-[#2f3745]'
+                }
+              >
+                {c.full_name}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
 
       {missing.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">

@@ -654,6 +654,11 @@ async def pause(
         raise HTTPException(400, "order_closed")
     if order.is_paused:
         raise HTTPException(409, "already_paused")
+    if order.control_id is not None:
+        # is_paused va control_id ikkalasi ham stage_deadline_frozen_remaining_sec'ni
+        # ishlatadi — bir vaqtda ikkalasi ham faol bo'lsa, muzlatilgan qiymat bir-birini
+        # ustiga yozib, control rad etilganda dedlayn tiklanmay qolishi mumkin.
+        raise HTTPException(409, "control_pending")
 
     now = now_utc()
     if order.stage_deadline:
@@ -767,6 +772,10 @@ async def request_control(
         raise HTTPException(409, "control_pending")
     if not order.stage.control_enabled:
         raise HTTPException(400, "control_not_enabled")
+    if order.is_paused:
+        # is_paused ham stage_deadline_frozen_remaining_sec'ni band qiladi — ikkalasi
+        # bir vaqtda faol bo'lsa, muzlatilgan qiymat ustma-ust tushib buziladi.
+        raise HTTPException(409, "already_paused")
 
     res = await db.execute(
         select(stage_controllers.c.user_id).where(
@@ -783,6 +792,12 @@ async def request_control(
 
     from_stage = order.stage
     now = now_utc()
+
+    if order.responsible_id is None:
+        # Control kutish paytida (va rad etilsa — undan keyin ham) joriy bosqichda
+        # "kim bajaryapti" noaniq bo'lib qolmasin — so'rovchi shu bosqichning
+        # mas'uli sifatida belgilanadi (xuddi "Olish" tugmasidagidek).
+        order.responsible_id = actor.id
 
     control = OrderControl(
         order_id=order.id,
@@ -807,7 +822,7 @@ async def request_control(
         order.stage_deadline = None
 
     await db.flush()
-    await db.refresh(order, ["control"])
+    await db.refresh(order, ["control", "responsible"])
     await db.refresh(control, ["controller", "requested_by", "target_stage"])
 
     await log_activity(

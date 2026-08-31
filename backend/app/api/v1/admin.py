@@ -405,6 +405,9 @@ _EVENT_LABELS: dict[str, tuple[str, str]] = {
     NotifyEvent.ORDER_PAUSED: ("Проект поставлен на паузу", "Proyekt pauza qilindi"),
     NotifyEvent.ORDER_RESUMED: ("Проект возобновлён", "Proyekt davom ettirildi"),
     NotifyEvent.ORDER_MOVED_BACK: ("Проект возвращён на предыдущий этап", "Proyekt oldingi bosqichga qaytarildi"),
+    NotifyEvent.ORDER_CONTROL_REQUESTED: ("Отправлен на контроль", "Control uchun yuborildi"),
+    NotifyEvent.ORDER_CONTROL_APPROVED: ("Контроль пройден", "Control o'tdi"),
+    NotifyEvent.ORDER_CONTROL_REJECTED: ("Контроль отклонён", "Control rad etildi"),
     NotifyEvent.CHAT_MESSAGE: ("Новое сообщение в чате", "Chatda yangi xabar"),
 }
 

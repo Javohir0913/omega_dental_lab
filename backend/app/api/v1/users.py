@@ -114,9 +114,15 @@ async def _apply_links(db, user: User, stage_ids, service_ids, control_stage_ids
 
 
 async def _load_user(db, user_id: int) -> User:
+    # populate_existing shart: create/update_user avvalroq oddiy select(User) bilan
+    # shu obyektni sessiyaga yuklab qo'ygan bo'lishi mumkin — `stages`/`services`/
+    # `control_stages` lazy="selectin" bo'lgani uchun avtomatik (eski holatda) yuklanadi,
+    # keyin _apply_links() xom SQL bilan jadvalni o'zgartiradi. populate_existing bo'lmasa
+    # identity map'dagi eski to'plam saqlanib qolib, javobda eskirgan ro'yxat qaytadi.
     res = await db.execute(
         select(User)
         .where(User.id == user_id)
+        .execution_options(populate_existing=True)
         .options(
             selectinload(User.role),
             selectinload(User.stages),

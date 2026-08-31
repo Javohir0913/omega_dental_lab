@@ -155,4 +155,25 @@ const ERRORS: Record<string, { ru: string; uz: string }> = {
     ru: 'Не задан адрес сайта в настройках (Общие настройки → Адрес сайта)',
     uz: "Sozlamalarda sayt manzili ko'rsatilmagan (Umumiy sozlamalar → Sayt manzili)",
   },
+  already_paused: { ru: 'Проект уже на паузе', uz: 'Proyekt allaqachon pauzada' },
+  not_paused: { ru: 'Проект не на паузе', uz: 'Proyekt pauzada emas' },
+  order_closed: { ru: 'Проект закрыт', uz: 'Proyekt yopilgan' },
+  control_pending: { ru: 'Проект на контроле', uz: 'Proyekt controlda' },
+  control_not_enabled: {
+    ru: 'На этом этапе контроль не включён',
+    uz: 'Bu bosqichda control yoqilmagan',
+  },
+  not_pending_control: {
+    ru: 'Этот проект сейчас не ожидает контроля',
+    uz: 'Bu proyekt hozir controlni kutmayapti',
+  },
+  invalid_controller: {
+    ru: 'Выбранный пользователь не может быть контролёром этого этапа',
+    uz: 'Tanlangan foydalanuvchi bu bosqich uchun kontrolyor bo‘la olmaydi',
+  },
+  stage_inactive: { ru: 'Этот этап отключён', uz: 'Bu bosqich o‘chirilgan' },
+  user_cannot_work_stage: {
+    ru: 'Этот сотрудник не назначен на данный этап',
+    uz: 'Bu xodim ushbu bosqichga biriktirilmagan',
+  },
 }

@@ -990,7 +990,10 @@ async def move_order(
         )
         raise HTTPException(403, "forbidden")
 
-    if order.stage.control_enabled:
+    is_backward = to_stage.sort < order.stage.sort
+    if order.stage.control_enabled and not is_backward:
+        # Control faqat OLDINGA (bosqichni "bitirib" chiqishda) talab qilinadi — orqaga
+        # qaytarish (xato bilan o'tkazib yuborilganini tuzatish) kontrolyorsiz o'tadi.
         res = await db.execute(
             select(User.id, User.full_name).join(
                 stage_controllers, stage_controllers.c.user_id == User.id

@@ -425,9 +425,16 @@ export default function KanbanPage() {
 
             <div className="hidden flex-1 md:block" />
 
+            {/* Bu yerda (filtr qatorida) joy yetmasa, WorkCalendarNotice o'zi
+                alohida qatorga tushadi — "⚙ Поля карточки" endi pastda,
+                "+ Новый проект" bilan bir joyda turgani uchun undan
+                ta'sirlanmaydi (ilgari ular yonma-yon bo'lib, uzun bildirishnoma
+                matni tugmani g'alati joyga surib yuborardi). */}
             <WorkCalendarNotice />
+          </div>
 
-            <div className="relative" ref={fieldsRef}>
+          <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+            <div className="relative shrink-0" ref={fieldsRef}>
               <button
                 className="rounded-lg border border-surface-border px-2.5 py-1.5 text-xs text-ink-soft hover:bg-surface-muted dark:border-[#2f3745] dark:hover:bg-[#222836]"
                 onClick={() => setShowFields((v) => !v)}
@@ -461,15 +468,13 @@ export default function KanbanPage() {
                 </div>
               )}
             </div>
+
+            {can('order.create') && (
+              <button className="btn-primary shrink-0" onClick={() => setCreating(true)}>
+                + {t('new_order')}
+              </button>
+            )}
           </div>
-
-          <div className="ml-auto shrink-0 md:ml-0" />
-
-          {can('order.create') && (
-            <button className="btn-primary shrink-0" onClick={() => setCreating(true)}>
-              + {t('new_order')}
-            </button>
-          )}
         </div>
       </div>
 

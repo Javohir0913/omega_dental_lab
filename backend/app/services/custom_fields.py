@@ -3,7 +3,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CustomField, CustomFieldValue
+from app.core.security import now_utc
+from app.models import CustomField, CustomFieldValue, FieldType
+from app.services import workcalendar
+
+# `default_value`da shu maxsus qiymat qo'yilsa — statik matn emas, proyekt
+# yaratilayotgan ANIQ shu paytdagi sana/vaqt qo'yiladi (har safar boshqacha).
+TODAY_SENTINEL = "__today__"
 
 
 async def fields_for(db: AsyncSession, entity: str, active_only: bool = True) -> list[CustomField]:
@@ -40,6 +46,32 @@ async def get_values_bulk(
     out: dict[int, dict[str, Any]] = {i: {} for i in entity_ids}
     for value_row, field in res.all():
         out.setdefault(value_row.entity_id, {})[field.code] = (value_row.value or {}).get("v")
+    return out
+
+
+def _default_value_for(field: CustomField) -> Any:
+    if field.default_value == TODAY_SENTINEL:
+        local_now = now_utc().astimezone(workcalendar.APP_TZ)
+        if field.type == FieldType.DATETIME:
+            return local_now.replace(microsecond=0).isoformat()
+        return local_now.date().isoformat()
+    return field.default_value
+
+
+async def apply_create_defaults(
+    db: AsyncSession, entity: str, values: dict[str, Any]
+) -> dict[str, Any]:
+    """Yaratish payload'ida berilmagan maydonlarga `default_value`ni qo'yadi
+    (`__today__` bo'lsa — joriy sana/vaqt). Foydalanuvchi allaqachon qiymat
+    bergan bo'lsa (bo'sh bo'lmasa) — tegilmaydi."""
+    fields = await fields_for(db, entity)
+    out = dict(values)
+    for f in fields:
+        if not f.default_value:
+            continue
+        if out.get(f.code) not in (None, ""):
+            continue
+        out[f.code] = _default_value_for(f)
     return out
 
 

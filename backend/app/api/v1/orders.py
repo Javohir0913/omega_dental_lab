@@ -60,7 +60,7 @@ from app.schemas.order import (
 from app.services import orders as svc
 from app.services import requirements as req_svc
 from app.services import workcalendar
-from app.services.custom_fields import get_values, get_values_bulk, set_values
+from app.services.custom_fields import apply_create_defaults, get_values, get_values_bulk, set_values
 from app.services.logger import log_activity
 from app.services.notify import notify
 from app.services.settings_store import get_setting
@@ -767,9 +767,16 @@ async def create_order(
         res = await db.execute(select(Service).where(Service.id.in_(body.service_ids)))
         order.services = list(res.scalars().all())
 
+    # Foydalanuvchi bermagan maydonlarga adminkada sozlangan default qo'yiladi
+    # (masalan "__today__" — joriy sana) — majburiylik tekshiruvidan OLDIN,
+    # aks holda default bilan to'ldirilishi kerak bo'lgan majburiy maydon
+    # "bo'sh" deb rad etilib qolardi.
+    custom_fields = await apply_create_defaults(db, "order", body.custom_fields)
+
     # Majburiy maydonlar (adminkada CREATE momenti uchun sozlangan)
     payload = body.model_dump()
     payload["services"] = order.services
+    payload["custom_fields"] = custom_fields
     try:
         await req_svc.validate_create(db, order, stage.id, payload)
     except req_svc.RequirementError as e:
@@ -785,8 +792,8 @@ async def create_order(
     db.add(order)
     await db.flush()
 
-    if body.custom_fields:
-        await set_values(db, "order", order.id, body.custom_fields)
+    if custom_fields:
+        await set_values(db, "order", order.id, custom_fields)
 
     await svc.open_history(db, order, actor)
     chat = await svc.ensure_order_chat(db, order, actor.id)

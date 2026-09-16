@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
@@ -51,6 +52,7 @@ from app.schemas.admin import (
 )
 from app.realtime.hub import hub
 from app.schemas.common import Msg
+from app.services import orders as order_svc
 from app.services import telegram
 from app.services.logger import log_activity
 from app.services.settings_store import all_settings, get_setting, set_setting
@@ -83,6 +85,45 @@ async def fields_meta(_: Annotated[User, Depends(require("admin.fields"))]):
     }
 
 
+async def _sync_create_requirement(db: AsyncSession, field: CustomField) -> None:
+    """`CustomField.required_on_create` bilan "Обязательные поля" bo'limidagi
+    (moment=CREATE) yozuvni sinxronlaydi — ikkalasi ham "yaratishda majburiy"
+    degan bir xil ma'noni bildiradi, lekin ilgari alohida-alohida qo'lda
+    sozlanishi kerak edi (checkbox faqat brauzer darajasidagi tekshiruvga
+    ta'sir qilardi, server esa faqat "Обязательные поля" jadvalini o'qirdi).
+    Faqat `order` entity uchun — bosqich (Stage) tushunchasi shu entityga xos.
+    """
+    if field.entity != FieldEntity.ORDER:
+        return
+    field_ref = f"cf:{field.id}"
+    res = await db.execute(
+        select(StageRequirement).where(
+            StageRequirement.field_ref == field_ref,
+            StageRequirement.moment == RequirementMoment.CREATE,
+        )
+    )
+    existing = res.scalar_one_or_none()
+
+    if field.required_on_create:
+        stage = await order_svc.first_stage(db)
+        if existing is None:
+            db.add(
+                StageRequirement(
+                    stage_id=stage.id,
+                    field_ref=field_ref,
+                    moment=RequirementMoment.CREATE,
+                    is_active=True,
+                )
+            )
+        elif not existing.is_active or existing.stage_id != stage.id:
+            existing.is_active = True
+            existing.stage_id = stage.id
+    elif existing is not None:
+        await db.delete(existing)
+
+    await db.flush()
+
+
 @router.post("/fields", response_model=CustomFieldOut, status_code=201)
 async def create_field(
     body: CustomFieldCreate,
@@ -108,6 +149,7 @@ async def create_field(
     field = CustomField(**body.model_dump())
     db.add(field)
     await db.flush()
+    await _sync_create_requirement(db, field)
 
     await log_activity(
         db, action="admin.field_created", category=LogCategory.ADMIN, actor=actor,
@@ -138,6 +180,9 @@ async def update_field(
     changes = {k: {"from": getattr(field, k), "to": v} for k, v in data.items()}
     for k, v in data.items():
         setattr(field, k, v)
+
+    if "required_on_create" in data:
+        await _sync_create_requirement(db, field)
 
     await log_activity(
         db, action="admin.field_updated", category=LogCategory.ADMIN, actor=actor,

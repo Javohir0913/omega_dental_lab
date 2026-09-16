@@ -35,18 +35,25 @@ async def get_current_user(
         raise _unauth("invalid_token")
 
     jti = payload.get("jti")
-    user_id = int(payload.get("sub", 0))
 
-    # Access token amal qilsa ham, sessiya uzilgan bo'lishi mumkin
-    # (limit oshgani yoki admin majburan chiqargani uchun) — har so'rovda tekshiramiz.
-    res = await db.execute(select(UserSession).where(UserSession.jti == jti))
-    session = res.scalar_one_or_none()
-    if session is None or session.revoked_at is not None:
+    # Access token amal qilsa ham, sessiya uzilgan bo'lishi mumkin (limit oshgani
+    # yoki admin majburan chiqargani uchun) — har so'rovda tekshiramiz. Bu
+    # avtorizatsiya HAR bir so'rovda bajariladigan zanjir bo'lgani uchun 2 ta
+    # ketma-ket so'rov o'rniga bitta join bilan qilinadi; shu bilan birga user
+    # endi JWT'dagi `sub`dan emas, sessiyaning haqiqiy egasidan olinadi (ikkita
+    # mustaqil manba o'rniga bitta — izchillik ham yaxshilanadi).
+    res = await db.execute(
+        select(UserSession, User)
+        .join(User, User.id == UserSession.user_id)
+        .where(UserSession.jti == jti)
+    )
+    row = res.first()
+    if row is None:
         raise _unauth("session_revoked")
-
-    res = await db.execute(select(User).where(User.id == user_id))
-    user = res.scalar_one_or_none()
-    if user is None or not user.is_active:
+    session, user = row
+    if session.revoked_at is not None:
+        raise _unauth("session_revoked")
+    if not user.is_active:
         raise _unauth("user_inactive")
 
     request.state.session = session

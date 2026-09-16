@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import now_utc
@@ -617,6 +617,22 @@ async def claim(db: AsyncSession, order: Order, user: User, request=None) -> Ord
     if not can_user_work_stage(user, order.stage):
         raise HTTPException(403, "stage_not_allowed_for_user")
 
+    # Atomik UPDATE — ikki texnik bir vaqtda "Olaman" bossa (tez-tez bo'ladigan
+    # holat), oddiy "tekshir-keyin-yoz" o'rniga DB darajasida faqat bittasi
+    # yutadi: WHERE responsible_id IS NULL shartisiz yozilgan bo'lsa, ikkalasi
+    # ham order.responsible_id ni None deb o'qib ulguradi va oxirgi commit
+    # birinchisini sezdirmasdan ustidan yozib yuboradi (jim-jit noto'g'ri holat).
+    res = await db.execute(
+        update(Order)
+        .where(Order.id == order.id, Order.responsible_id.is_(None))
+        .values(responsible_id=user.id)
+        .returning(Order.id)
+    )
+    if res.scalar_one_or_none() is None:
+        raise HTTPException(409, "already_taken")
+    # xotiradagi ob'ektni ham darhol mos qilamiz — pastdagi refresh faqat
+    # `responsible` relationship'ini yuklaydi, ORM ning raw UPDATE'dan keyin
+    # skalyar ustunni avtomatik sinxronlashiga tayanmaslik uchun aniq yozamiz.
     order.responsible_id = user.id
     await db.flush()
     await db.refresh(order, ["responsible"])
@@ -813,6 +829,18 @@ async def request_control(
     db.add(control)
     await db.flush()
 
+    # Atomik — ikki kishi bir vaqtda "control'ga yuborsa" (masalan ikki oyna/tab),
+    # faqat bittasi order.control_id'ni band qila oladi; ikkinchisi 409 oladi
+    # (yaratilgan ortiqcha OrderControl yozuvi status="pending" holda qoladi,
+    # lekin order'ga bog'lanmagani uchun ish oqimiga ta'sir qilmaydi).
+    res = await db.execute(
+        update(Order)
+        .where(Order.id == order.id, Order.control_id.is_(None))
+        .values(control_id=control.id)
+        .returning(Order.id)
+    )
+    if res.scalar_one_or_none() is None:
+        raise HTTPException(409, "control_pending")
     order.control_id = control.id
 
     if from_stage.control_pause_deadline and order.stage_deadline is not None:
@@ -874,8 +902,19 @@ async def approve_control(
     requested_by_id = control.requested_by_id
     next_responsible_id = control.next_responsible_id
 
+    # Atomik — kontrolyor ikki oyna/qurilmadan bir vaqtda tasdiqlasa (yoki
+    # approve/reject bir vaqtda bosilsa), faqat birinchisi status'ni o'zgartira oladi.
+    resolved_at = now_utc()
+    res = await db.execute(
+        update(OrderControl)
+        .where(OrderControl.id == control.id, OrderControl.status == "pending")
+        .values(status="approved", resolved_at=resolved_at, resolved_comment=comment)
+        .returning(OrderControl.id)
+    )
+    if res.scalar_one_or_none() is None:
+        raise HTTPException(409, "not_pending_control")
     control.status = "approved"
-    control.resolved_at = now_utc()
+    control.resolved_at = resolved_at
     control.resolved_comment = comment
     order.control_id = None
     if order.stage_deadline_frozen_remaining_sec is not None and order.stage_deadline is None:
@@ -929,6 +968,14 @@ async def reject_control(
         raise HTTPException(403, "forbidden")
 
     now = now_utc()
+    res = await db.execute(
+        update(OrderControl)
+        .where(OrderControl.id == control.id, OrderControl.status == "pending")
+        .values(status="rejected", resolved_at=now, resolved_comment=comment)
+        .returning(OrderControl.id)
+    )
+    if res.scalar_one_or_none() is None:
+        raise HTTPException(409, "not_pending_control")
     control.status = "rejected"
     control.resolved_at = now
     control.resolved_comment = comment

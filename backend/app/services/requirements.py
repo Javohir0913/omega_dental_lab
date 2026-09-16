@@ -74,22 +74,37 @@ async def requirements_for(
     return list(res.scalars().all())
 
 
-async def _label(db: AsyncSession, field_ref: str) -> tuple[str, str]:
+def _cf_id(field_ref: str) -> int | None:
+    try:
+        return int(field_ref.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+async def _load_custom_fields(db: AsyncSession, reqs: list[StageRequirement]) -> dict[int, CustomField]:
+    """`reqs` ichidagi barcha `cf:<id>` havolalarini BITTA so'rovda oldindan yuklaydi —
+    avval har majburiy maydon uchun alohida `SELECT CustomField` bor edi."""
+    ids = {fid for r in reqs if r.field_ref.startswith("cf:") and (fid := _cf_id(r.field_ref)) is not None}
+    if not ids:
+        return {}
+    res = await db.execute(select(CustomField).where(CustomField.id.in_(ids)))
+    return {f.id: f for f in res.scalars().all()}
+
+
+def _label(field_ref: str, fields_by_id: dict[int, CustomField]) -> tuple[str, str]:
     if field_ref.startswith("sys:"):
         return SYS_LABELS.get(field_ref, (field_ref, field_ref))
     if field_ref.startswith("cf:"):
-        try:
-            fid = int(field_ref.split(":", 1)[1])
-        except ValueError:
-            return (field_ref, field_ref)
-        res = await db.execute(select(CustomField).where(CustomField.id == fid))
-        f = res.scalar_one_or_none()
+        fid = _cf_id(field_ref)
+        f = fields_by_id.get(fid) if fid is not None else None
         if f:
             return (f.label_ru, f.label_uz)
     return (field_ref, field_ref)
 
 
-async def _value_of(db: AsyncSession, field_ref: str, order: Order, payload: dict):  # noqa: ANN001
+def _value_of(
+    field_ref: str, order: Order, payload: dict, fields_by_id: dict[int, CustomField], cf_values: dict
+):
     """Qiymatni avval kelayotgan payload'dan, bo'lmasa order'dan oladi."""
     if field_ref.startswith("sys:"):
         name = field_ref.split(":", 1)[1]
@@ -102,15 +117,14 @@ async def _value_of(db: AsyncSession, field_ref: str, order: Order, payload: dic
         return getattr(order, name, None)
 
     if field_ref.startswith("cf:"):
-        res = await db.execute(select(CustomField).where(CustomField.id == int(field_ref[3:])))
-        f = res.scalar_one_or_none()
+        fid = _cf_id(field_ref)
+        f = fields_by_id.get(fid) if fid is not None else None
         if f is None:
             return None
         cf_payload = payload.get("custom_fields") or {}
         if f.code in cf_payload:
             return cf_payload[f.code]
-        values = await get_values(db, "order", order.id) if order.id else {}
-        return values.get(f.code)
+        return cf_values.get(f.code)
 
     return None
 
@@ -129,12 +143,17 @@ async def validate(
     if not reqs:
         return
 
+    # Oldin har bir majburiy maydon uchun 1-2 ta alohida so'rov ketardi
+    # (CustomField + get_values qayta-qayta) — endi ikkalasi ham bitta martadan.
+    fields_by_id = await _load_custom_fields(db, reqs)
+    cf_values = await get_values(db, "order", order.id) if order.id else {}
+
     missing: list[MissingField] = []
     for r in reqs:
-        value = await _value_of(db, r.field_ref, order, payload)
+        value = _value_of(r.field_ref, order, payload, fields_by_id, cf_values)
         if not _is_empty(value):
             continue
-        label_ru, label_uz = await _label(db, r.field_ref)
+        label_ru, label_uz = _label(r.field_ref, fields_by_id)
         missing.append(
             MissingField(
                 field_ref=r.field_ref,

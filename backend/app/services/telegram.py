@@ -16,17 +16,37 @@ log = logging.getLogger("omega.telegram")
 
 API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
+# Har chaqiriqda yangi httpx.AsyncClient ochish (avval shunday edi) har safar
+# yangi TCP/TLS ulanish qilishga majburlaydi — digest yuborilganda (ko'p
+# kontaktga ketma-ket xabar) yoki poller tez-tez ishlaganda bu ortiqcha
+# kechikish/resurs. Bitta umumiy client (connection pool bilan) qayta
+# ishlatiladi; jarayon to'xtaganda `aclose_client()` orqali yopiladi (main.py).
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=10)
+    return _client
+
+
+async def aclose_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
+
 
 async def send_message(token: str, chat_id: int, text: str) -> bool:
     if not token:
         return False
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.post(
-                API_BASE.format(token=token, method="sendMessage"),
-                json={"chat_id": chat_id, "text": text},
-            )
-            return res.status_code == 200
+        res = await _get_client().post(
+            API_BASE.format(token=token, method="sendMessage"),
+            json={"chat_id": chat_id, "text": text},
+        )
+        return res.status_code == 200
     except Exception:
         log.exception("Telegram sendMessage xatosi (chat_id=%s)", chat_id)
         return False
@@ -36,10 +56,9 @@ async def get_me(token: str) -> dict | None:
     if not token:
         return None
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(API_BASE.format(token=token, method="getMe"))
-            data = res.json()
-            return data.get("result") if data.get("ok") else None
+        res = await _get_client().get(API_BASE.format(token=token, method="getMe"))
+        data = res.json()
+        return data.get("result") if data.get("ok") else None
     except Exception:
         log.exception("Telegram getMe xatosi")
         return None
@@ -49,10 +68,11 @@ async def get_updates(token: str, offset: int | None) -> list[dict]:
     params = {"timeout": 25}
     if offset is not None:
         params["offset"] = offset
-    async with httpx.AsyncClient(timeout=35) as client:
-        res = await client.get(API_BASE.format(token=token, method="getUpdates"), params=params)
-        data = res.json()
-        return data.get("result", []) if data.get("ok") else []
+    res = await _get_client().get(
+        API_BASE.format(token=token, method="getUpdates"), params=params, timeout=35
+    )
+    data = res.json()
+    return data.get("result", []) if data.get("ok") else []
 
 
 async def _quiet_today(db: AsyncSession) -> bool:

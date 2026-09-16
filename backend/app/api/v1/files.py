@@ -1,3 +1,4 @@
+import asyncio
 import io
 import mimetypes
 import uuid
@@ -113,6 +114,17 @@ def _is_inline_mime(mime: str) -> bool:
 
 def _raw_preview_path(abs_path: Path) -> Path:
     return abs_path.with_name(abs_path.name + ".preview.jpg")
+
+
+def _convert_to_jpeg(abs_path: Path, out_path: Path) -> None:
+    """CPU-bog'liq (Pillow) — har doim `asyncio.to_thread` orqali chaqirilishi kerak,
+    event loop'ni bloklamasin deb."""
+    with Image.open(abs_path) as image:
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        elif image.mode == "L":
+            image = image.convert("RGB")
+        image.save(out_path, format="JPEG", quality=92, optimize=True)
 
 
 def _extract_raw_preview(abs_path: Path) -> bytes | None:
@@ -303,15 +315,14 @@ async def upload(
     is_image = mime in IMAGE_MIMES
 
     # iPhone HEIC/HEIF rasmlari brauzerda ko'rinishi uchun JPEG ga aylantiramiz.
+    # Pillow'ning open/convert/save'i CPU-bog'liq sinxron ish — to'g'ridan-to'g'ri
+    # await qilinsa butun event loop'ni (demak BARCHA foydalanuvchining so'rovlarini,
+    # WebSocket ping-pong'ini ham) shu konvertatsiya tugagunicha bloklaydi. Shu
+    # sabab alohida thread'ga chiqariladi.
     if ext in HEIC_EXTS and Image is not None:
         converted_path = abs_path.with_suffix(".jpg")
         try:
-            with Image.open(abs_path) as image:
-                if image.mode not in ("RGB", "L"):
-                    image = image.convert("RGB")
-                elif image.mode == "L":
-                    image = image.convert("RGB")
-                image.save(converted_path, format="JPEG", quality=92, optimize=True)
+            await asyncio.to_thread(_convert_to_jpeg, abs_path, converted_path)
             abs_path.unlink(missing_ok=True)
             abs_path = converted_path
             rel_path = rel_path.with_suffix(".jpg")
@@ -411,42 +422,56 @@ async def reassign_file(
     return Msg(detail="reassigned")
 
 
+def _build_zip(entries: list[tuple[Path, str]]) -> bytes:
+    """CPU/IO-bog'liq sinxron ish (disk o'qish + siqish) — har doim
+    `asyncio.to_thread` orqali chaqirilishi kerak, event loop'ni bloklamasin deb."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for abs_path, arcname in entries:
+            zf.write(abs_path, arcname=arcname)
+    return buffer.getvalue()
+
+
 @router.post("/zip")
 async def download_zip(payload: ZipRequest, db: DbDep, user: CurrentUser):
     if not payload.file_ids and not payload.sample_paths:
         raise HTTPException(400, "no_files_selected")
 
     used_names: set[str] = set()
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        if payload.file_ids:
-            res = await db.execute(select(FileAsset).where(FileAsset.id.in_(payload.file_ids)))
-            assets = {a.id: a for a in res.scalars().all()}
-            for file_id in payload.file_ids:
-                asset = assets.get(file_id)
-                if asset is None or asset.deleted_at is not None:
-                    continue
-                if not await _can_view_file(db, user, asset):
-                    continue
-                abs_path = _upload_root() / asset.path
-                if not abs_path.exists():
-                    continue
-                zf.write(abs_path, arcname=_unique_zip_name(asset.name, used_names))
+    to_zip: list[tuple[Path, str]] = []
 
-        for sample_path in payload.sample_paths:
-            try:
-                abs_path = _safe_sample_path(sample_path)
-            except HTTPException:
+    if payload.file_ids:
+        res = await db.execute(select(FileAsset).where(FileAsset.id.in_(payload.file_ids)))
+        assets = {a.id: a for a in res.scalars().all()}
+        for file_id in payload.file_ids:
+            asset = assets.get(file_id)
+            if asset is None or asset.deleted_at is not None:
                 continue
-            if not abs_path.exists() or not abs_path.is_file():
+            if not await _can_view_file(db, user, asset):
                 continue
-            zf.write(abs_path, arcname=_unique_zip_name(abs_path.name, used_names))
+            abs_path = _upload_root() / asset.path
+            if not abs_path.exists():
+                continue
+            to_zip.append((abs_path, _unique_zip_name(asset.name, used_names)))
 
-    if not used_names:
+    for sample_path in payload.sample_paths:
+        try:
+            abs_path = _safe_sample_path(sample_path)
+        except HTTPException:
+            continue
+        if not abs_path.exists() or not abs_path.is_file():
+            continue
+        to_zip.append((abs_path, _unique_zip_name(abs_path.name, used_names)))
+
+    if not to_zip:
         raise HTTPException(404, "no_files_found")
 
+    # Fayllarni o'qish/siqish — ayniqsa 3D skan fayllarida (STL/OBJ/PLY, o'nlab MB)
+    # bir necha soniya cho'zilishi mumkin, shuning uchun alohida thread'da.
+    content = await asyncio.to_thread(_build_zip, to_zip)
+
     return Response(
-        content=buffer.getvalue(),
+        content=content,
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="files.zip"'},
     )
@@ -498,10 +523,13 @@ async def raw_preview(file_id: int, db: DbDep, user: CurrentUser):
 
     cache_path = _raw_preview_path(abs_path)
     if not cache_path.exists():
-        data = _extract_raw_preview(abs_path)
+        # RAW dekodlash (rawpy.postprocess) bir necha soniya davom etishi mumkin —
+        # to'g'ridan-to'g'ri await qilinsa, shuncha vaqt butun API barcha
+        # foydalanuvchilar uchun javob bermay qoladi. Shuning uchun thread'da.
+        data = await asyncio.to_thread(_extract_raw_preview, abs_path)
         if data is None:
             raise HTTPException(404, "preview_unavailable")
-        cache_path.write_bytes(data)
+        await asyncio.to_thread(cache_path.write_bytes, data)
 
     return FileResponse(cache_path, media_type="image/jpeg", content_disposition_type="inline")
 

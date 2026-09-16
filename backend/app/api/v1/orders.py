@@ -197,7 +197,15 @@ async def _decorate(  # noqa: ANN001
 
 
 async def _order_unread_map(db, order_ids: list[int], user_id: int) -> dict[int, int]:  # noqa: ANN001
-    """Har bir proyekt uchun o'qilmagan chat xabarlari soni."""
+    """Har bir proyekt uchun o'qilmagan chat xabarlari soni.
+
+    Har bir chat uchun alohida COUNT so'rov yubormaydi (avval shunday edi —
+    kanban'da bir vaqtda 100+ karta bo'lsa, 100+ ta qo'shimcha so'rov degani
+    edi). Har chatning "last_read" chegarasi turlicha bo'lgani uchun bitta
+    umumiy WHERE bilan guruhlab bo'lmaydi, shuning uchun har chat uchun shart
+    OR bilan bitta so'rovga jamlanadi — natijada chat sonidan qat'i nazar
+    doim faqat 3 ta so'rov ketadi.
+    """
     if not order_ids:
         return {}
     res = await db.execute(select(Chat.order_id, Chat.id).where(Chat.order_id.in_(order_ids)))
@@ -214,18 +222,23 @@ async def _order_unread_map(db, order_ids: list[int], user_id: int) -> dict[int,
     )
     last_read = dict(res.all())
 
-    out: dict[int, int] = {}
-    for order_id, chat_id in order_to_chat.items():
-        lr = last_read.get(chat_id)
-        q = select(func.count(Message.id)).where(
-            Message.chat_id == chat_id, Message.deleted_at.is_(None)
-        )
-        if lr:
-            q = q.where(Message.id > lr)
-        n = (await db.execute(q)).scalar() or 0
-        if n:
-            out[order_id] = n
-    return out
+    conditions = [
+        and_(Message.chat_id == cid, Message.id > lr) if lr else (Message.chat_id == cid)
+        for cid in chat_ids
+        for lr in [last_read.get(cid)]
+    ]
+    res = await db.execute(
+        select(Message.chat_id, func.count(Message.id))
+        .where(Message.deleted_at.is_(None), or_(*conditions))
+        .group_by(Message.chat_id)
+    )
+    counts = dict(res.all())
+
+    return {
+        order_id: counts[chat_id]
+        for order_id, chat_id in order_to_chat.items()
+        if counts.get(chat_id)
+    }
 
 
 async def _order_unread_files_map(
@@ -463,23 +476,26 @@ async def kanban(
         only_mine, only_free, overdue, paused, control,
     )
 
+    # Har ustun uchun alohida COUNT so'rov o'rniga — bitta guruhlangan so'rov
+    # (bosqichlar soni qancha bo'lmasin, doim 1 ta so'rov).
+    totals_subq = base.subquery()
+    totals_res = await db.execute(
+        select(totals_subq.c.stage_id, func.count()).group_by(totals_subq.c.stage_id)
+    )
+    totals = dict(totals_res.all())
+
     columns: list[KanbanColumn] = []
     from app.schemas.catalog import StageOut
 
     for stage in stages:
-        q_stage = base.where(Order.stage_id == stage.id)
-        total = (
-            await db.execute(select(func.count()).select_from(q_stage.subquery()))
-        ).scalar() or 0
-
-        q_stage = _kanban_order_by(q_stage, stage)
+        q_stage = _kanban_order_by(base.where(Order.stage_id == stage.id), stage)
 
         res = await db.execute(q_stage.limit(limit_per_column))
         rows = list(res.scalars().all())
         columns.append(
             KanbanColumn(
                 stage=StageOut.model_validate(stage),
-                total=total,
+                total=totals.get(stage.id, 0),
                 orders=await _cards(db, rows, user),
             )
         )

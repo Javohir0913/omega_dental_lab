@@ -61,7 +61,12 @@ class Order(Base, TimestampMixin):
     )
 
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    stage_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # kanban'dagi `overdue` filtri va fon `check_overdue()` vazifasi
+    # `WHERE stage_deadline < now` bilan muntazam qidiradi — indekssiz bu
+    # proyektlar ko'payganda full table scan'ga aylanadi.
+    stage_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     stage_entered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # `deadline` (umumiy proyekt dedlayni) o'tganda oxirgi marta qachon ogohlantirilgani
     deadline_overdue_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

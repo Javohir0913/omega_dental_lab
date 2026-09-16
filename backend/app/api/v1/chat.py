@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
@@ -90,9 +90,33 @@ async def _unread_count(db, chat_id: int, last_read_id: int | None) -> int:  # n
     return (await db.execute(q)).scalar() or 0
 
 
+async def _unread_counts_bulk(db, chat_last_read: dict[int, int | None]) -> dict[int, int]:  # noqa: ANN001
+    """`_unread_count`ning ko'plab chat uchun bitta so'rovli versiyasi — har
+    chatning "o'qilgan" chegarasi har xil bo'lgani uchun OR bilan bitta
+    so'rovga jamlanadi (chat soniga qarab N ta alohida COUNT o'rniga doim 1 ta)."""
+    if not chat_last_read:
+        return {}
+    conditions = [
+        and_(Message.chat_id == cid, Message.id > lr) if lr else (Message.chat_id == cid)
+        for cid, lr in chat_last_read.items()
+    ]
+    res = await db.execute(
+        select(Message.chat_id, func.count(Message.id))
+        .where(Message.deleted_at.is_(None), or_(*conditions))
+        .group_by(Message.chat_id)
+    )
+    return dict(res.all())
+
+
 @router.get("", response_model=list[ChatOut])
 async def my_chats(db: DbDep, user: CurrentUser, type: str | None = None):
-    """Mening chatlarim: proyekt chatlari + shaxsiy yozishmalar."""
+    """Mening chatlarim: proyekt chatlari + shaxsiy yozishmalar.
+
+    Foydalanuvchida o'nlab chat bo'lishi mumkin (har proyekt o'z chatini
+    ochadi) — avval har chat uchun 2-3 ta alohida so'rov ketardi (unread,
+    oxirgi xabar, proyekt nomi). Endi chat sonidan qat'i nazar doim bir nechta
+    (o'zgarmas sondagi) guruhlangan so'rov bilan hal qilinadi.
+    """
     q = (
         select(Chat, ChatMember)
         .join(ChatMember, ChatMember.chat_id == Chat.id)
@@ -101,9 +125,32 @@ async def my_chats(db: DbDep, user: CurrentUser, type: str | None = None):
     if type:
         q = q.where(Chat.type == type)
     res = await db.execute(q.order_by(Chat.last_message_at.desc().nullslast()))
+    pairs = res.all()
+    if not pairs:
+        return []
+
+    chat_ids = [chat.id for chat, _ in pairs]
+    chat_last_read = {chat.id: member.last_read_message_id for chat, member in pairs}
+    unread_counts = await _unread_counts_bulk(db, chat_last_read)
+
+    last_msg_res = await db.execute(
+        select(Message.chat_id, Message.text)
+        .distinct(Message.chat_id)
+        .where(Message.chat_id.in_(chat_ids), Message.deleted_at.is_(None))
+        .order_by(Message.chat_id, Message.id.desc())
+    )
+    last_message_map = dict(last_msg_res.all())
+
+    order_ids = [chat.order_id for chat, _ in pairs if chat.order_id]
+    order_info: dict[int, tuple[str, str]] = {}
+    if order_ids:
+        o_res = await db.execute(
+            select(Order.id, Order.number, Order.title).where(Order.id.in_(order_ids))
+        )
+        order_info = {oid: (number, title) for oid, number, title in o_res.all()}
 
     out: list[ChatOut] = []
-    for chat, member in res.all():
+    for chat, member in pairs:
         members = [UserShort.model_validate(m.user) for m in chat.members if m.user]
         row = ChatOut(
             id=chat.id,
@@ -112,27 +159,19 @@ async def my_chats(db: DbDep, user: CurrentUser, type: str | None = None):
             last_message_at=chat.last_message_at,
             members=members,
         )
-        row.unread = await _unread_count(db, chat.id, member.last_read_message_id)
+        row.unread = unread_counts.get(chat.id, 0)
         row.hidden = member.hidden
 
         if chat.type == ChatType.DIRECT:
             peer = next((m.user for m in chat.members if m.user_id != user.id), None)
             row.peer = UserShort.model_validate(peer) if peer else None
             row.title = peer.full_name if peer else "—"
-        elif chat.order_id:
-            o = await db.execute(select(Order.number, Order.title).where(Order.id == chat.order_id))
-            found = o.first()
-            if found:
-                row.order_number = found[0]
-                row.title = f"{found[0]} · {found[1]}"
+        elif chat.order_id and chat.order_id in order_info:
+            number, title = order_info[chat.order_id]
+            row.order_number = number
+            row.title = f"{number} · {title}"
 
-        last = await db.execute(
-            select(Message.text)
-            .where(Message.chat_id == chat.id, Message.deleted_at.is_(None))
-            .order_by(Message.id.desc())
-            .limit(1)
-        )
-        row.last_message = last.scalar_one_or_none()
+        row.last_message = last_message_map.get(chat.id)
         out.append(row)
     return out
 
@@ -550,14 +589,9 @@ async def unread_total(db: DbDep, user: CurrentUser):
             ChatMember.user_id == user.id
         )
     )
-    total = 0
-    per_chat: dict[int, int] = {}
-    for chat_id, last_read in res.all():
-        n = await _unread_count(db, chat_id, last_read)
-        if n:
-            per_chat[chat_id] = n
-            total += n
-    return {"total": total, "chats": per_chat}
+    chat_last_read = dict(res.all())
+    per_chat = await _unread_counts_bulk(db, chat_last_read)
+    return {"total": sum(per_chat.values()), "chats": per_chat}
 
 
 class MemberAdd(BaseModel):

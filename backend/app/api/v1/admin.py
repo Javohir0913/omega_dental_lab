@@ -49,11 +49,11 @@ from app.schemas.admin import (
     TelegramLinkBody,
     TelegramTestOut,
 )
+from app.realtime.hub import hub
 from app.schemas.common import Msg
 from app.services import telegram
 from app.services.logger import log_activity
 from app.services.settings_store import all_settings, get_setting, set_setting
-from app.services.telegram_poller import telegram_poller
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -523,7 +523,10 @@ async def update_settings(
     if "telegram_bot_token" in body.values or "telegram_enabled" in body.values:
         enabled = await get_setting(db, "telegram_enabled", False)
         token = await get_setting(db, "telegram_bot_token", "")
-        await telegram_poller.restart(token if enabled and token else None)
+        # To'g'ridan-to'g'ri emas — signal orqali: bu so'rovni QAYSI uvicorn
+        # worker qabul qilgani noaniq, poller esa faqat fon-vazifa yetakchisi
+        # process'da ishlaydi (backend/app/main.py). send_control shu process'ga yetkazadi.
+        await hub.send_control("telegram_restart", {"token": token if enabled and token else None})
 
     return SettingsOut(values=await all_settings(db))
 

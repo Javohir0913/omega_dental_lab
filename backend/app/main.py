@@ -115,25 +115,60 @@ async def _send_due_digests(db) -> None:  # noqa: ANN001
     await db.commit()
 
 
+async def _leader_renew_worker() -> None:
+    """Yetakchilik lock'ining TTL'ini davriy yangilab turadi (TTL'dan ancha tez-tez),
+    aks holda 90 soniyadan keyin boshqa worker o'zini yetakchi deb o'ylab, fon
+    vazifalarni (dedlayn tekshiruvi, telegram poller) takroran ishga tushirib yuboradi."""
+    while True:
+        await asyncio.sleep(30)
+        if not await hub.renew_leader():
+            log.warning("Fon vazifalar yetakchilik lock'ini yo'qotdi")
+
+
+async def _handle_telegram_restart(data: dict) -> None:
+    await telegram_poller.restart(data.get("token") or None)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ANN201
     await hub.start()
-    task = asyncio.create_task(_overdue_worker())
-    digest_task = asyncio.create_task(_telegram_digest_worker())
 
-    async with AsyncSessionLocal() as db:
-        if await get_setting(db, "telegram_enabled", False):
-            token = await get_setting(db, "telegram_bot_token", "")
-            if token:
-                await telegram_poller.start(token)
+    # Bir nechta uvicorn worker/konteyner bo'lsa ham (docker-compose.prod.yml da
+    # `--workers 2`), fon vazifalar (dedlayn tekshiruvi, telegram digest, telegram
+    # long-polling) faqat BITTA process'da ishlasin — aks holda har biri o'z-o'zicha
+    # ikki barobar bajarilib, takroriy bildirishnoma va Telegram getUpdates
+    # to'qnashuvi (bir xil bot tokeni ikki joydan poll qilinadi) yuzaga keladi.
+    is_leader = await hub.try_acquire_leader()
+    tasks: list[asyncio.Task] = []
 
-    log.info("%s ishga tushdi", settings.PROJECT_NAME)
+    if is_leader:
+        # boshqa (leader bo'lmagan) worker'dan admin panel orqali kelgan
+        # "telegram tokeni/yoqilgani o'zgardi" signalini shu process ushlab olsin
+        hub.on_control("telegram_restart", _handle_telegram_restart)
+
+        tasks.append(asyncio.create_task(_leader_renew_worker()))
+        tasks.append(asyncio.create_task(_overdue_worker()))
+        tasks.append(asyncio.create_task(_telegram_digest_worker()))
+
+        async with AsyncSessionLocal() as db:
+            if await get_setting(db, "telegram_enabled", False):
+                token = await get_setting(db, "telegram_bot_token", "")
+                if token:
+                    await telegram_poller.start(token)
+        log.info("%s ishga tushdi (fon vazifalar yetakchisi)", settings.PROJECT_NAME)
+    else:
+        log.info(
+            "%s ishga tushdi (fon vazifalar boshqa worker'da ishlaydi)", settings.PROJECT_NAME
+        )
+
     try:
         yield
     finally:
-        task.cancel()
-        digest_task.cancel()
-        await telegram_poller.stop()
+        for t in tasks:
+            t.cancel()
+        if is_leader:
+            await telegram_poller.stop()
+        await telegram.aclose_client()
         await hub.stop()
 
 

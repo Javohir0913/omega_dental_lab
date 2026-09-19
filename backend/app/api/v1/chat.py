@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import noload
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
@@ -117,10 +118,15 @@ async def my_chats(db: DbDep, user: CurrentUser, type: str | None = None):
     oxirgi xabar, proyekt nomi). Endi chat sonidan qat'i nazar doim bir nechta
     (o'zgarmas sondagi) guruhlangan so'rov bilan hal qilinadi.
     """
+    # `Chat.order` (lazy="selectin") bu yerda umuman ishlatilmaydi — proyekt
+    # nomi pastda alohida bulk so'rov bilan olinadi. Uni noload qilmasak,
+    # har chaqiriqda kerak bo'lmagan Order'lar (va ularning o'zining patient/
+    # doctor/stage/... zanjiri) ham bekorga yuklanib ketaveradi.
     q = (
         select(Chat, ChatMember)
         .join(ChatMember, ChatMember.chat_id == Chat.id)
         .where(ChatMember.user_id == user.id)
+        .options(noload(Chat.order))
     )
     if type:
         q = q.where(Chat.type == type)

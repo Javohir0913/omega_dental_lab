@@ -5,7 +5,8 @@ from typing import Annotated
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import Text, and_, case, cast, func, or_, select
+from sqlalchemy import Select, Text, and_, case, cast, func, or_, select
+from sqlalchemy.orm import defaultload, noload
 
 from app.core.deps import CurrentUser, DbDep, require
 from app.core.security import now_utc
@@ -280,7 +281,9 @@ async def _order_unread_files_map(
     }
 
 
-async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noqa: ANN001
+async def _cards(  # noqa: ANN001
+    db, orders: list[Order], user: User, cal: workcalendar.WorkCalendar | None = None
+) -> list[OrderCard]:
     if not orders:
         return []
     ids = [o.id for o in orders]
@@ -318,7 +321,8 @@ async def _cards(db, orders: list[Order], user: User) -> list[OrderCard]:  # noq
         has_3d_map[entity_id] = bool(has_3d)
     unread_map = await _order_unread_map(db, ids, user.id)
     unread_files_map = await _order_unread_files_map(db, ids, user.id, files_count)
-    cal = await workcalendar.load_calendar(db)  # ro'yxat uchun bir marta yuklanadi
+    if cal is None:
+        cal = await workcalendar.load_calendar(db)  # chaqiruvchi oldindan yuklamagan bo'lsa
 
     out = []
     for o in orders:
@@ -391,6 +395,26 @@ async def work_calendar_status(db: DbDep, _: CurrentUser):
 # --------------------------------------------------------------------------
 
 
+def _order_card_query() -> Select:
+    """`OrderCard`/`_cards()` uchun asosiy `select(Order)`.
+
+    `created_by`, `control.from_stage`, `control.target_stage`, `control.requested_by`
+    kartochkada hech qachon ko'rsatilmaydi (faqat OrderDetail/OrderControlOut'da kerak) —
+    lekin Order modelida `lazy="selectin"` bo'lgani uchun har safar orderlar yuklanganda
+    ular ham avtomatik so'ralib, keraksiz qo'shimcha so'rovlarni ko'paytiradi.
+    """
+    return (
+        select(Order)
+        .where(Order.deleted_at.is_(None))
+        .options(
+            noload(Order.created_by),
+            defaultload(Order.control).noload(OrderControl.from_stage),
+            defaultload(Order.control).noload(OrderControl.target_stage),
+            defaultload(Order.control).noload(OrderControl.requested_by),
+        )
+    )
+
+
 def _kanban_base_query(
     user: User,
     q: str | None,
@@ -404,7 +428,7 @@ def _kanban_base_query(
     paused: bool,
     control: bool = False,
 ):
-    base = select(Order).where(Order.deleted_at.is_(None))
+    base = _order_card_query()
     base = _visibility_filter(base, user)
     if q:
         base = _apply_search(base, q)
@@ -484,21 +508,33 @@ async def kanban(
     )
     totals = dict(totals_res.all())
 
-    columns: list[KanbanColumn] = []
-    from app.schemas.catalog import StageOut
+    # Ish kalendari (bayramlar + sozlamalar) butun doska uchun bir marta yuklanadi.
+    # Avval har bir ustun `_cards()` orqali uni alohida-alohida qayta yuklar edi —
+    # bosqichlar soni qancha bo'lsa, kalendar/custom field/fayl/unread so'rovlari
+    # ham shuncha marta takrorlanardi (masalan 10 ta bosqichda ~10x ortiqcha so'rov).
+    cal = await workcalendar.load_calendar(db)
 
+    stage_rows: list[tuple[Stage, list[Order]]] = []
+    all_rows: list[Order] = []
     for stage in stages:
         q_stage = _kanban_order_by(base.where(Order.stage_id == stage.id), stage)
-
         res = await db.execute(q_stage.limit(limit_per_column))
         rows = list(res.scalars().all())
-        columns.append(
-            KanbanColumn(
-                stage=StageOut.model_validate(stage),
-                total=totals.get(stage.id, 0),
-                orders=await _cards(db, rows, user),
-            )
+        stage_rows.append((stage, rows))
+        all_rows.extend(rows)
+
+    # Custom fieldlar, fayllar soni, o'qilmagan xabarlar va h.k. — barcha ustunlar
+    # bo'yicha BIR MARTA, alohida-alohida emas.
+    cards_by_id = {card.id: card for card in await _cards(db, all_rows, user, cal)}
+
+    columns = [
+        KanbanColumn(
+            stage=StageOut.model_validate(stage),
+            total=totals.get(stage.id, 0),
+            orders=[cards_by_id[o.id] for o in rows],
         )
+        for stage, rows in stage_rows
+    ]
 
     return KanbanOut(columns=columns)
 
@@ -622,7 +658,7 @@ async def list_orders(
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
 ):
-    query = _visibility_filter(select(Order).where(Order.deleted_at.is_(None)), user)
+    query = _visibility_filter(_order_card_query(), user)
     if q:
         query = _apply_search(query, q)
     if stage_id:

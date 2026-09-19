@@ -120,25 +120,41 @@ async def system_stats(
     user: Annotated[User, Depends(require("log.system"))],
     date_from: datetime | None = None,
 ):
-    """Tizim logi bosh sahifasi uchun qisqa statistika."""
+    """Tizim logi bosh sahifasi uchun qisqa statistika.
+
+    Avval har daraja (3 ta) va har kategoriya (8 ta) uchun alohida `COUNT(*)`
+    so'rovi ketardi (~13 ta ketma-ket so'rov) — `activity_logs` jadvali
+    kattalashgani sari bu sekinlashib borardi. Endi bitta so'rovda
+    `FILTER (WHERE ...)` bilan barcha hisoblar birga olinadi.
+    """
     base = select(ActivityLog)
     if date_from:
         base = base.where(ActivityLog.created_at >= date_from)
+    base_subq = base.subquery()
 
-    async def _count(*conds) -> int:  # noqa: ANN002
-        q = base
-        for c in conds:
-            q = q.where(c)
-        res = await db.execute(select(func.count()).select_from(q.subquery()))
-        return res.scalar() or 0
+    res = await db.execute(
+        select(
+            func.count().label("total"),
+            func.count().filter(base_subq.c.is_success.is_(False)).label("failed"),
+            *(
+                func.count().filter(base_subq.c.level == lv).label(f"level__{lv}")
+                for lv in LogLevel.ALL
+            ),
+            *(
+                func.count().filter(base_subq.c.category == c).label(f"category__{c}")
+                for c in LogCategory.ALL
+            ),
+        ).select_from(base_subq)
+    )
+    row = res.mappings().one()
 
-    by_level = {lv: await _count(ActivityLog.level == lv) for lv in LogLevel.ALL}
-    by_category = {c: await _count(ActivityLog.category == c) for c in LogCategory.ALL}
+    by_level = {lv: row[f"level__{lv}"] for lv in LogLevel.ALL}
+    by_category = {c: row[f"category__{c}"] for c in LogCategory.ALL}
 
     return {
-        "total": await _count(),
+        "total": row["total"],
         "errors": by_level.get(LogLevel.ERROR, 0),
-        "failed": await _count(ActivityLog.is_success.is_(False)),
+        "failed": row["failed"],
         "by_level": by_level,
         "by_category": by_category,
     }

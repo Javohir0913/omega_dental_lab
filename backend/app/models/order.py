@@ -54,7 +54,7 @@ class Order(Base, TimestampMixin):
     )
 
     created_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_by: Mapped["User | None"] = relationship(  # noqa: F821
         lazy="selectin", foreign_keys=[created_by_id]

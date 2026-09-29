@@ -577,7 +577,13 @@ async def move_to_stage(
 
     # Ko'chishda aniq mas'ul berilgan bo'lsa (masalan, "chiqishda majburiy maydon"
     # sifatida) — bu ham tayinlash hisoblanadi, shuning uchun alohida bildirishnoma
-    # ketadi (assign() endpoint orqali tayinlanganda bo'lgani kabi).
+    # ketadi (assign() endpoint orqali tayinlanganda bo'lgani kabi). Eski mas'ulga
+    # alohida "unassigned" xabari BU YERDA ataylab yuborilmaydi — bosqich ko'chishi
+    # o'zining bildirishnomalariga ega (yangi bosqichda mas'ul bo'lganga — shu
+    # yerdagi order.assigned; orqaga qaytarishda — order.moved_back), shuning uchun
+    # qo'shimcha "siz mas'ul emassiz" signali ortiqcha shovqin bo'lardi. Bu signal
+    # faqat assign() orqali, bosqichdan mustaqil ravishda qo'lda o'zgartirilganda
+    # yuboriladi.
     if next_responsible_id and next_responsible_id != prev_responsible_id:
         await notify_svc.notify(
             db,
@@ -586,30 +592,6 @@ async def move_to_stage(
             actor=actor,
             stage_id=to_stage.id,
             prev_responsible_id=prev_responsible_id,
-        )
-        # assign()dagi kabi — oldingi mas'ul ham "endi mas'ul emassiz" xabarini olsin.
-        if prev_responsible_id:
-            await notify_svc.notify(
-                db,
-                NotifyEvent.ORDER_UNASSIGNED,
-                order=order,
-                actor=actor,
-                stage_id=to_stage.id,
-                extra_user_ids=[prev_responsible_id],
-                only_extra=True,
-            )
-    elif prev_responsible_id and order.responsible_id != prev_responsible_id:
-        # Aniq mas'ul tanlanmasdan oddiy ko'chirilganda ham mas'ul avtomatik
-        # o'zgarishi/bo'shashi mumkin (oldinga — bo'shaydi, orqaga — boshqa odamga
-        # qaytadi) — bu holatlarda ham eski mas'ul xabarsiz qolmasin.
-        await notify_svc.notify(
-            db,
-            NotifyEvent.ORDER_UNASSIGNED,
-            order=order,
-            actor=actor,
-            stage_id=to_stage.id,
-            extra_user_ids=[prev_responsible_id],
-            only_extra=True,
         )
 
     skipped_ids = [uid for uid in skipped_ids if uid != actor.id]

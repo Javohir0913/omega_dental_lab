@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -197,8 +198,15 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
+    # Pydantic v2'da @field_validator ichida oddiy `raise ValueError(...)`
+    # qilinsa, exc.errors()dagi har bir yozuvning ctx.error maydoni HAQIQIY
+    # ValueError OBYEKTINI o'z ichiga oladi (matn emas) — bu JSON'ga
+    # to'g'ridan-to'g'ri serialize qilinmaydi va JSONResponse o'zi ICHKARIDA
+    # yana bitta (500) xatoga olib kelardi. jsonable_encoder shunday
+    # obyektlarni xavfsiz (matn) ko'rinishga aylantiradi.
     return JSONResponse(
-        status_code=422, content={"detail": {"error": "validation", "fields": exc.errors()}}
+        status_code=422,
+        content={"detail": {"error": "validation", "fields": jsonable_encoder(exc.errors())}},
     )
 
 

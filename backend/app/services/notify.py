@@ -137,6 +137,14 @@ DEFAULT_RECIPIENTS: dict[str, list[str]] = {
 }
 
 
+def _fill_pair(ru: str, uz: str, default_ru: str, default_uz: str) -> tuple[str, str]:
+    """RU/UZ juftlikda bittasi bo'sh bo'lsa — ikkinchi (yozilgan) tildan
+    to'ldiradi; ikkalasi ham bo'sh bo'lsagina standart matnga qaytadi."""
+    out_ru = ru or uz or default_ru
+    out_uz = uz or ru or default_uz
+    return out_ru, out_uz
+
+
 def render(template: str, ctx: dict) -> str:
     """{placeholder} larni almashtiradi; noma'lum kalit xatoga olib kelmaydi."""
 
@@ -261,16 +269,15 @@ async def notify(
         tokens = list(tpl.recipients or [])
         notify_actor = tpl.notify_actor
         send_telegram = tpl.send_telegram
-        # Har bir maydon (sarlavha/matn, RU/UZ) MUSTAQIL ravishda standartga
-        # qaytadi — admin, masalan, faqat "Текст"ni to'ldirib "Заголовок"ni
-        # bo'sh qoldirsa, avval sarlavha butunlay bo'sh chiqib ketardi (chunki
-        # "hammasi yoki hech narsa" tekshiruvi bor edi). Endi har biri o'zicha.
-        texts = tuple(
-            tpl_text or default_text
-            for tpl_text, default_text in zip(
-                (tpl.title_ru, tpl.title_uz, tpl.body_ru, tpl.body_uz), default_texts
-            )
-        )
+        default_title_ru, default_title_uz, default_body_ru, default_body_uz = default_texts
+        # Har bir juftlik (sarlavha RU/UZ, matn RU/UZ) o'zaro to'ldiradi — admin
+        # faqat bitta tilda yozib, ikkinchisini bo'sh qoldirsa, o'sha bitta
+        # (maxsus yozilgan) matn ikkala tilga ham ketadi — umumiy "standart"
+        # matnga sakrab o'tmaydi. Faqat IKKALASI HAM bo'sh bo'lsagina standartga
+        # qaytadi.
+        title_ru, title_uz = _fill_pair(tpl.title_ru, tpl.title_uz, default_title_ru, default_title_uz)
+        body_ru, body_uz = _fill_pair(tpl.body_ru, tpl.body_uz, default_body_ru, default_body_uz)
+        texts = (title_ru, title_uz, body_ru, body_uz)
     else:
         tokens = DEFAULT_RECIPIENTS.get(event, [])
         notify_actor = False

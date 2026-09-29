@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import ORMModel
 from app.schemas.user import UserShort
@@ -120,6 +120,16 @@ class NotifyTemplateUpsert(BaseModel):
     title_uz: str = ""
     body_ru: str = ""
     body_uz: str = ""
+
+    @field_validator("title_ru", "title_uz")
+    @classmethod
+    def _title_required(cls, v: str) -> str:
+        # Bo'sh sarlavha bilan yuborilgan bildirishnoma bo'sh toast/qator
+        # bo'lib ko'rinadi (chiroyli tayyor matn bilan "yashirib" o'rniga —
+        # admin har doim ANIQ nima ketishini ko'rib, o'zi yozishi kerak).
+        if not v.strip():
+            raise ValueError("title_required")
+        return v
 
 
 class NotifyMetaOut(BaseModel):

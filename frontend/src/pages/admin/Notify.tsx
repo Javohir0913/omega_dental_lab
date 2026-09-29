@@ -61,6 +61,15 @@ export default function AdminNotify() {
   }, [event, stageId, templates])
 
   async function save() {
+    if (!form.title_ru?.trim() || !form.title_uz?.trim()) {
+      toast(
+        lang === 'ru'
+          ? 'Заполните заголовок (RU и UZ)'
+          : 'Sarlavhani (RU va UZ) to\'ldiring',
+        'error',
+      )
+      return
+    }
     setBusy(true)
     try {
       await api.put('/admin/notify/templates', {
@@ -254,7 +263,7 @@ export default function AdminNotify() {
           </Field>
 
           <div className="grid gap-x-4 sm:grid-cols-2">
-            <Field label={`${t('notify_title')} (RU)`}>
+            <Field label={`${t('notify_title')} (RU)`} required>
               <input
                 className="input"
                 value={form.title_ru ?? ''}
@@ -262,7 +271,7 @@ export default function AdminNotify() {
                 onChange={(e) => setForm({ ...form, title_ru: e.target.value })}
               />
             </Field>
-            <Field label={`${t('notify_title')} (UZ)`}>
+            <Field label={`${t('notify_title')} (UZ)`} required>
               <input
                 className="input"
                 value={form.title_uz ?? ''}

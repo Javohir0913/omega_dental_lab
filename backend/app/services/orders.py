@@ -598,6 +598,19 @@ async def move_to_stage(
                 extra_user_ids=[prev_responsible_id],
                 only_extra=True,
             )
+    elif prev_responsible_id and order.responsible_id != prev_responsible_id:
+        # Aniq mas'ul tanlanmasdan oddiy ko'chirilganda ham mas'ul avtomatik
+        # o'zgarishi/bo'shashi mumkin (oldinga — bo'shaydi, orqaga — boshqa odamga
+        # qaytadi) — bu holatlarda ham eski mas'ul xabarsiz qolmasin.
+        await notify_svc.notify(
+            db,
+            NotifyEvent.ORDER_UNASSIGNED,
+            order=order,
+            actor=actor,
+            stage_id=to_stage.id,
+            extra_user_ids=[prev_responsible_id],
+            only_extra=True,
+        )
 
     skipped_ids = [uid for uid in skipped_ids if uid != actor.id]
     if is_backward and skipped_ids:

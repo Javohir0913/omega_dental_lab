@@ -255,19 +255,27 @@ async def notify(
     matni) qayta ishlatilsa ham.
     """
     tpl = await _template_for(db, event, stage_id or (order.stage_id if order else None))
+    default_texts = DEFAULT_TEXTS.get(event, ("{order_number}", "{order_number}", "", ""))
 
     if tpl is not None:
         tokens = list(tpl.recipients or [])
         notify_actor = tpl.notify_actor
         send_telegram = tpl.send_telegram
-        texts = (tpl.title_ru, tpl.title_uz, tpl.body_ru, tpl.body_uz)
-        if not any(texts):
-            texts = DEFAULT_TEXTS.get(event, ("{order_number}", "{order_number}", "", ""))
+        # Har bir maydon (sarlavha/matn, RU/UZ) MUSTAQIL ravishda standartga
+        # qaytadi — admin, masalan, faqat "Текст"ni to'ldirib "Заголовок"ni
+        # bo'sh qoldirsa, avval sarlavha butunlay bo'sh chiqib ketardi (chunki
+        # "hammasi yoki hech narsa" tekshiruvi bor edi). Endi har biri o'zicha.
+        texts = tuple(
+            tpl_text or default_text
+            for tpl_text, default_text in zip(
+                (tpl.title_ru, tpl.title_uz, tpl.body_ru, tpl.body_uz), default_texts
+            )
+        )
     else:
         tokens = DEFAULT_RECIPIENTS.get(event, [])
         notify_actor = False
         send_telegram = False
-        texts = DEFAULT_TEXTS.get(event, ("{order_number}", "{order_number}", "", ""))
+        texts = default_texts
 
     title_ru, title_uz, body_ru, body_uz = texts
 

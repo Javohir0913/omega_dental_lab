@@ -587,6 +587,17 @@ async def move_to_stage(
             stage_id=to_stage.id,
             prev_responsible_id=prev_responsible_id,
         )
+        # assign()dagi kabi — oldingi mas'ul ham "endi mas'ul emassiz" xabarini olsin.
+        if prev_responsible_id:
+            await notify_svc.notify(
+                db,
+                NotifyEvent.ORDER_UNASSIGNED,
+                order=order,
+                actor=actor,
+                stage_id=to_stage.id,
+                extra_user_ids=[prev_responsible_id],
+                only_extra=True,
+            )
 
     skipped_ids = [uid for uid in skipped_ids if uid != actor.id]
     if is_backward and skipped_ids:
@@ -1058,6 +1069,12 @@ async def assign(
         meta={"from": old_id, "to": order.responsible_id},
         request=request,
     )
+    # Qayta tayinlashda (A dan B ga) standart oqim faqat B'ga ("sizga tayinlandi")
+    # xabar beradi — A esa bexabar qolib, "hali ham men mas'ulman" deb ishlashda
+    # davom etishi mumkin. Shu sababli A ham "endi mas'ul emassiz" xabarini olsin —
+    # xuddi to'liq olib tashlanganda (order.unassigned) bo'lgani kabi, o'sha bitta
+    # shablon orqali (Adminka → Уведомления → "Снят исполнитель").
+    reassigned = bool(user_id and old_id and old_id != order.responsible_id)
     await system_message(db, order, f"Ответственный: {name}", actor_id=actor.id)
     await notify_svc.notify(
         db,
@@ -1067,6 +1084,16 @@ async def assign(
         stage_id=order.stage_id,
         prev_responsible_id=old_id,
     )
+    if reassigned:
+        await notify_svc.notify(
+            db,
+            NotifyEvent.ORDER_UNASSIGNED,
+            order=order,
+            actor=actor,
+            stage_id=order.stage_id,
+            extra_user_ids=[old_id],
+            only_extra=True,
+        )
     await broadcast_order(order, "order.updated", {})
     return order
 

@@ -241,8 +241,19 @@ async def notify(
     skipped_responsible_ids: list[int] | None = None,
     ctx: dict | None = None,
     link: dict | None = None,
+    only_extra: bool = False,
 ) -> list[Notification]:
-    """Hodisa bo'yicha bildirishnoma yaratadi va real-time yuboradi."""
+    """Hodisa bo'yicha bildirishnoma yaratadi va real-time yuboradi.
+
+    `only_extra=True` — standart/shablon qabul qiluvchilar (masalan
+    Recipient.STAGE_USERS) butunlay e'tiborga olinmaydi, faqat `extra_user_ids`
+    ro'yxatidagilarga boradi. Matn (title/body) baribir shu hodisaning odatiy
+    shablonidan olinadi — faqat "kimga ketishi" toraytiriladi. Masalan: qayta
+    tayinlashda oldingi mas'ulga "endi mas'ul emassiz" degan aniq shaxsiy
+    xabar — bu shu bosqichni bajara oladigan HAMMAGA emas, faqat o'sha bitta
+    odamga tegishli, garchi umumiy "order.unassigned" hodisasi (va uning
+    matni) qayta ishlatilsa ham.
+    """
     tpl = await _template_for(db, event, stage_id or (order.stage_id if order else None))
 
     if tpl is not None:
@@ -261,7 +272,7 @@ async def notify(
     title_ru, title_uz, body_ru, body_uz = texts
 
     user_ids = await resolve_recipients(
-        db, tokens,
+        db, [] if only_extra else tokens,
         order=order, actor=actor, stage_id=stage_id,
         prev_responsible_id=prev_responsible_id, extra_user_ids=extra_user_ids,
         skipped_responsible_ids=skipped_responsible_ids,
